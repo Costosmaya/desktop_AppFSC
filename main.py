@@ -57,7 +57,7 @@ class mainWindow(QtWidgets.QMainWindow):
         directory = ""
         while len(directory) == 0:
             directory = str(QtWidgets.QFileDialog.getExistingDirectory(self, "Seleccione la carpeta"))
-        self.ui.rutaLabel.setText(self.ui.rutaLabel.text()+directory)
+        self.ui.rutaLabel.setText(self.ui.rutaLabel.text().split(':')[0]+':'+directory)
     
     def generateArgs(self):
         choiceF = self.ui.fechaFButton.isChecked()
