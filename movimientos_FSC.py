@@ -8,6 +8,8 @@ from datetime import datetime
 
 import os
 
+import math
+
 from sqlalchemy.sql.expression import false
 
 def movimientos(self,args,path):
@@ -274,6 +276,8 @@ FROM
     dfMergedT.insert(8,"Material Impresión (Kg)", dfMergedT['Despachos de Bodega (Kg)'] - dfMergedT['Merma Corte Inicial (Kg)'])
     dfMergedT['Perdida Impresión (Kg)'] = dfMergedT['Cantidad_Malas'] * dfMergedT['Masa por Pliego Prensa']
 
+    dfMergedT['Pliegos para Impresión'] = round(dfMergedT['Material Impresión (Kg)'] / dfMergedT['Masa por Pliego Prensa'],0)
+
 
     dfMergedT['Fracción pérdida Impresión'] = dfMergedT['Perdida Impresión (Kg)'] / dfMergedT['Material Impresión (Kg)']
     dfMergedT.drop(columns=['Cantidad_Total', 'Masa por Pliego Prensa', 'Cantidad_Buenas', 'Cantidad_Malas'], inplace=True)
@@ -290,8 +294,9 @@ FROM
     dfPCajas['Masa Salida Pegado Cajas (kg)'] = dfPCajas['Cantidad_Buenas'] * dfPCajas['Peso_Ejemplar']
     dfPCajas['Masa Total Cajas (kg)'] = (dfPCajas['Cantidad_Buenas'] +dfPCajas['Cantidad_Malas'])* dfPCajas['Peso_Ejemplar']
     dfPCajas['Merma Pegado Cajas (kg)'] = (dfPCajas['Cantidad_Malas'] * dfPCajas['Peso_Ejemplar'])
+    dfPCajas['Unidades Totales'] = dfPCajas['Cantidad_Buenas'] + dfPCajas['Cantidad_Malas']
     dfPCajas['Fracción Merma Pegado Cajas'] = dfPCajas['Merma Pegado Cajas (kg)']/dfPCajas['Masa Total Cajas (kg)']
-    dfPCajas = dfPCajas[['j_number', 'Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas', 'Masa Total Cajas (kg)']]
+    dfPCajas = dfPCajas[['j_number','Unidades Totales', 'Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas', 'Masa Total Cajas (kg)']]
 
     self.progress.emit(75)
 
@@ -305,7 +310,10 @@ FROM
     dfTroquel['Masa de material conforme facturado (Kg)'] = dfTroquel['Qty'] * dfTroquel['Peso_Ejemplar']
 
     dfTroquel['Masa Salida Troquel (kg)'] = (dfTroquel['Cantidad_Buenas']+dfTroquel['Cantidad_Malas']) * dfTroquel['Masa por Pliego Prensa']
-    dfTroquel = dfTroquel[['j_number', 'Masa Salida Troquel (kg)', 'Masa de material conforme facturado (Kg)']]
+
+    dfTroquel['Pliegos para Troquelado'] = dfTroquel['Cantidad_Buenas'] + dfTroquel['Cantidad_Malas']
+
+    dfTroquel = dfTroquel[['j_number','Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Qty','Masa de material conforme facturado (Kg)']]
 
 
     dfmovimientosMasa = pd.merge(left=dfMergedT, right=dfTroquel, how='left', left_on='j_number', right_on = 'j_number')
@@ -318,14 +326,15 @@ FROM
 
     dfmovimientosMasa['Fracción de pérdida por limpieza de troquel (%)'] = dfmovimientosMasa['Merma Limpieza Troquel (kg)']/(dfmovimientosMasa['Masa Salida Troquel (kg)']+ dfmovimientosMasa['Merma Limpieza Troquel (kg)'])
 
-    dfmovimientosMasa = dfmovimientosMasa[['j_number', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial', 'Material Impresión (Kg)', 
-    'Perdida Impresión (Kg)', 'Fracción pérdida Impresión', 'Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)', 'Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas'
-    ,'Masa de material conforme facturado (Kg)']]
+    dfmovimientosMasa = dfmovimientosMasa[['j_number', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Impresión', 'Material Impresión (Kg)', 
+    'Perdida Impresión (Kg)', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)','Unidades Totales','Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas'
+  ,'Qty','Masa de material conforme facturado (Kg)']]
 
     dfmovimientosMasa = dfmovimientosMasa.rename(columns={"j_number":"OP", "Despacho_Bodega":"Despacho de pliegos almacén", "Masa Salida Troquel (k)":"Masa material troquelado conforme", "Despachos de Bodega (Kg)":"Despachos de pliego almacén (Kg)",
     "Merma Corte Inicial (Kg)":"Pérdida Corte Inicial por exceso (Kg)", "Fracción Merma Corte Inicial":"Fracción de pérdida por Corte Inicial (%)", "Material Impresión (Kg)":"Material para Impresión (Kg)",
     "Perdida Impresión (Kg)":"Pérdida por arreglo de  Impresión (Kg)","Fracción pérdida Impresión":"Fracción de pérdida por Impresión (%)", "Masa Salida Troquel (kg)":"Masa material para Troquelado(kg)",
-    "Merma Limpieza Troquel (kg)":"Pérdida por Limpieza de Troquel (kg)","Merma Pegado Cajas (kg)":"Pérdida por  Pegado de Cajas (kg)", "Fracción Merma Pegado Cajas":"Fracción de pérdida por Pegado de Cajas"})
+    "Merma Limpieza Troquel (kg)":"Pérdida por Limpieza de Troquel (kg)","Merma Pegado Cajas (kg)":"Pérdida por  Pegado de Cajas (kg)", "Fracción Merma Pegado Cajas":"Fracción de pérdida por Pegado de Cajas"
+    , 'Qty':'Unidades Facturadas'})
     
     dfmovimientosMasa.fillna(0.0,inplace=True)
 
