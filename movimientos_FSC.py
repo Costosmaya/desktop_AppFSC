@@ -276,7 +276,7 @@ FROM
     dfMergedT.insert(8,"Material Impresión (Kg)", dfMergedT['Despachos de Bodega (Kg)'] - dfMergedT['Merma Corte Inicial (Kg)'])
     dfMergedT['Perdida Impresión (Kg)'] = dfMergedT['Cantidad_Malas'] * dfMergedT['Masa por Pliego Prensa']
 
-    dfMergedT['Pliegos para Impresión'] = round(dfMergedT['Material Impresión (Kg)'] / dfMergedT['Masa por Pliego Prensa'],0)
+    dfMergedT['Pliegos para Arreglo e Impresión'] = round(dfMergedT['Material Impresión (Kg)'] / dfMergedT['Masa por Pliego Prensa'],0)
 
 
     dfMergedT['Fracción pérdida Impresión'] = dfMergedT['Perdida Impresión (Kg)'] / dfMergedT['Material Impresión (Kg)']
@@ -326,15 +326,17 @@ FROM
 
     dfmovimientosMasa['Fracción de pérdida por limpieza de troquel (%)'] = dfmovimientosMasa['Merma Limpieza Troquel (kg)']/(dfmovimientosMasa['Masa Salida Troquel (kg)']+ dfmovimientosMasa['Merma Limpieza Troquel (kg)'])
 
-    dfmovimientosMasa = dfmovimientosMasa[['j_number', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Impresión', 'Material Impresión (Kg)', 
-    'Perdida Impresión (Kg)', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)','Unidades Totales','Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas'
+    dfmovimientosMasa['Pérdida por arreglo de Impresión (kg) 2'] = dfmovimientosMasa['Material Impresión (Kg)'] - dfmovimientosMasa['Masa Salida Troquel (kg)']
+
+    dfmovimientosMasa = dfmovimientosMasa[['j_number', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
+    'Perdida Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)','Unidades Totales','Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas'
   ,'Qty','Masa de material conforme facturado (Kg)']]
 
     dfmovimientosMasa = dfmovimientosMasa.rename(columns={"j_number":"OP", "Despacho_Bodega":"Despacho de pliegos almacén", "Masa Salida Troquel (k)":"Masa material troquelado conforme", "Despachos de Bodega (Kg)":"Despachos de pliego almacén (Kg)",
-    "Merma Corte Inicial (Kg)":"Pérdida Corte Inicial por exceso (Kg)", "Fracción Merma Corte Inicial":"Fracción de pérdida por Corte Inicial (%)", "Material Impresión (Kg)":"Material para Impresión (Kg)",
+    "Merma Corte Inicial (Kg)":"Pérdida Corte Inicial por exceso (Kg)", "Fracción Merma Corte Inicial":"Fracción de pérdida por Corte Inicial (%)", "Material Impresión (Kg)":"Material para Arreglos e Impresión (Kg)",
     "Perdida Impresión (Kg)":"Pérdida por arreglo de  Impresión (Kg)","Fracción pérdida Impresión":"Fracción de pérdida por Impresión (%)", "Masa Salida Troquel (kg)":"Masa material para Troquelado(kg)",
     "Merma Limpieza Troquel (kg)":"Pérdida por Limpieza de Troquel (kg)","Merma Pegado Cajas (kg)":"Pérdida por  Pegado de Cajas (kg)", "Fracción Merma Pegado Cajas":"Fracción de pérdida por Pegado de Cajas"
-    , 'Qty':'Unidades Facturadas'})
+    , 'Qty':'Unidades Facturadas', 'Unidades Totales':'Unidades Totales para pegue'})
     
     dfmovimientosMasa.fillna(0.0,inplace=True)
 
@@ -345,29 +347,37 @@ FROM
     _path = _path.replace('/','//') if len(path) > 0 else _path.replace('\\','//')
 
     with pd.ExcelWriter(_path, engine='xlsxwriter') as writer:
-      dfmovimientosMasa.to_excel(writer, sheet_name="Datos", index = False)
+      # dfmovimientosMasa.to_excel(writer, sheet_name="Datos", index = False)
 
       workbook = writer.book
       
-      worksheet = writer.sheets['Datos']
+      worksheet = workbook.add_worksheet('Datos')
     
       cell_format = workbook.add_format()
       cell_format.set_text_wrap()
-      cell_format.set_bg_color('#ff7328')
+      cell_format.set_bg_color('#4BACC6')
 
-      cell_format2 = workbook.add_format({'bg_color':'#10c458'})
+      cell_format2 = workbook.add_format({'bg_color':'#9BBB59'})
 
       cell_format2.set_text_wrap()
 
+      row_format = workbook.add_format()
+      row_format.set_num_format('0.0%')
+      row_format.set_bg_color('#b1ca7d')
+
+      row_format1 = workbook.add_format()
+      row_format1.set_num_format('#,##0.00')
+      row_format1.set_bg_color('#72bed2')
+
       (max_row, max_col) = dfmovimientosMasa.shape
 
-      column_settings = [{'header': column, 'header_format': cell_format if "Fracción" not in column else cell_format2} for column in dfmovimientosMasa.columns]
+      column_settings = [{'header': column, 'header_format': cell_format if "Fracción" not in column else cell_format2, 'format':row_format if "Fracción" in column else row_format1} for column in dfmovimientosMasa.columns]
 
 
-      worksheet.add_table(0, 0, max_row, max_col - 1, {'columns': column_settings})
+      worksheet.add_table(0, 0, max_row, max_col-1, {'data':dfmovimientosMasa.values.tolist(),'style':None,'columns': column_settings})
 
       # Make the columns wider for clarity.
-      worksheet.set_column(0, max_col - 1, 12)
+      worksheet.set_column(0, max_col-1, 12)
     
     self.message.emit("Reporte Generado!")
   

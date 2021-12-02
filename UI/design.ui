@@ -85,42 +85,6 @@
     </property>
     <layout class="QVBoxLayout" name="verticalLayout">
      <item>
-      <widget class="QGroupBox" name="fileGroup">
-       <property name="title">
-        <string>Ruta Archivo</string>
-       </property>
-       <widget class="QPushButton" name="dirButton">
-        <property name="geometry">
-         <rect>
-          <x>50</x>
-          <y>30</y>
-          <width>131</width>
-          <height>41</height>
-         </rect>
-        </property>
-        <property name="text">
-         <string>seleccionar</string>
-        </property>
-       </widget>
-       <widget class="QLabel" name="rutaLabel">
-        <property name="geometry">
-         <rect>
-          <x>190</x>
-          <y>40</y>
-          <width>591</width>
-          <height>21</height>
-         </rect>
-        </property>
-        <property name="text">
-         <string>ruta:</string>
-        </property>
-        <property name="margin">
-         <number>5</number>
-        </property>
-       </widget>
-      </widget>
-     </item>
-     <item>
       <widget class="QGroupBox" name="dateGroup">
        <property name="enabled">
         <bool>false</bool>
@@ -253,6 +217,42 @@
           <width>321</width>
           <height>20</height>
          </rect>
+        </property>
+       </widget>
+      </widget>
+     </item>
+     <item>
+      <widget class="QGroupBox" name="fileGroup">
+       <property name="title">
+        <string>Ruta Almacenamiento de Archivo</string>
+       </property>
+       <widget class="QPushButton" name="dirButton">
+        <property name="geometry">
+         <rect>
+          <x>50</x>
+          <y>30</y>
+          <width>131</width>
+          <height>41</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>seleccionar</string>
+        </property>
+       </widget>
+       <widget class="QLabel" name="rutaLabel">
+        <property name="geometry">
+         <rect>
+          <x>190</x>
+          <y>40</y>
+          <width>591</width>
+          <height>21</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>ruta:</string>
+        </property>
+        <property name="margin">
+         <number>5</number>
         </property>
        </widget>
       </widget>
