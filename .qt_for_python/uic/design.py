@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'design.ui'
+# Form implementation generated from reading ui file 'c:\Users\User\Documents\Analisis  Desarrollo Costos\Scripts\Python\desktop_App FSC\UI\design.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.4
 #
