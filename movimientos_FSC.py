@@ -327,20 +327,25 @@ FROM
     dfmovimientosMasa['Fracción de pérdida por limpieza de troquel (%)'] = dfmovimientosMasa['Merma Limpieza Troquel (kg)']/(dfmovimientosMasa['Masa Salida Troquel (kg)']+ dfmovimientosMasa['Merma Limpieza Troquel (kg)'])
 
     dfmovimientosMasa['Pérdida por arreglo de Impresión (kg) 2'] = dfmovimientosMasa['Material Impresión (Kg)'] - dfmovimientosMasa['Masa Salida Troquel (kg)']
+    dfmovimientosMasa["Pérdida por  revisión (kg)"] = dfmovimientosMasa["Masa Salida Troquel (kg)"] - dfmovimientosMasa['Merma Limpieza Troquel (kg)'] -dfmovimientosMasa["Masa de material conforme facturado (Kg)"] - dfmovimientosMasa["Merma Pegado Cajas (kg)"]
 
     dfmovimientosMasa = dfmovimientosMasa[['j_number', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
     'Perdida Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)','Unidades Totales','Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas'
-  ,'Qty','Masa de material conforme facturado (Kg)']]
+  ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)']]
+
+    
 
     dfmovimientosMasa = dfmovimientosMasa.rename(columns={"j_number":"OP", "Despacho_Bodega":"Despacho de pliegos almacén", "Masa Salida Troquel (k)":"Masa material troquelado conforme", "Despachos de Bodega (Kg)":"Despachos de pliego almacén (Kg)",
     "Merma Corte Inicial (Kg)":"Pérdida Corte Inicial por exceso (Kg)", "Fracción Merma Corte Inicial":"Fracción de pérdida por Corte Inicial (%)", "Material Impresión (Kg)":"Material para Arreglos e Impresión (Kg)",
     "Perdida Impresión (Kg)":"Pérdida por arreglo de  Impresión (Kg)","Fracción pérdida Impresión":"Fracción de pérdida por Impresión (%)", "Masa Salida Troquel (kg)":"Masa material para Troquelado(kg)",
     "Merma Limpieza Troquel (kg)":"Pérdida por Limpieza de Troquel (kg)","Merma Pegado Cajas (kg)":"Pérdida por  Pegado de Cajas (kg)", "Fracción Merma Pegado Cajas":"Fracción de pérdida por Pegado de Cajas"
     , 'Qty':'Unidades Facturadas', 'Unidades Totales':'Unidades Totales para pegue'})
+
+    dfmovimientosMasa['Fracción Material Conforme %'] = dfmovimientosMasa['Masa de material conforme facturado (Kg)'] / dfmovimientosMasa['Despachos de pliego almacén (Kg)']
     
     dfmovimientosMasa.fillna(0.0,inplace=True)
 
-    dfmovimientosMasa["Pérdida por  revisión (kg)"] = dfmovimientosMasa["Masa material para Troquelado(kg)"] - dfmovimientosMasa['Pérdida por Limpieza de Troquel (kg)'] -dfmovimientosMasa["Masa de material conforme facturado (Kg)"] - dfmovimientosMasa["Pérdida por  Pegado de Cajas (kg)"]
+    
 
     _path = os.path.join(path if len(path)> 0 else os.getcwd(), "movimientos_FSC_{}.xlsx".format(datetime.now().strftime("%Y%m%d-%H%M%S")))
 
@@ -367,7 +372,6 @@ FROM
 
       row_format1 = workbook.add_format()
       row_format1.set_num_format('#,##0.00')
-      row_format1.set_bg_color('#72bed2')
 
       (max_row, max_col) = dfmovimientosMasa.shape
 
