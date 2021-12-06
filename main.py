@@ -7,9 +7,11 @@ from UI.design import Ui_MainWindow
 
 from UI.dialog import Ui_Dialog
 
-from movimientos_FSC import movimientos
+from movimientos_FSC import movimientos, trazabilidad, db_connectionObj
 
 mutex = QMutex()
+
+db_connection = db_connectionObj()
 
 class Worker(QObject):
     finished = pyqtSignal()
@@ -19,7 +21,7 @@ class Worker(QObject):
     def Movimientos(self,args, path):
         mutex.lock()
         self.progress.emit(25)
-        movimientos(self,args, path)
+        movimientos(self,args, path, db_connection)
         mutex.unlock()
         self.finished.emit()
 

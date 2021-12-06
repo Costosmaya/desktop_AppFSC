@@ -12,10 +12,71 @@ import math
 
 from sqlalchemy.sql.expression import false
 
-def movimientos(self,args,path):
+def db_connectionObj():
   db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/pruebas?charset=utf8'
 
   db_connection = create_engine(db_connection_str)
+
+  return db_connection
+
+def __findLargest__(df):
+  dfCount = pd.DataFrame(df)
+
+  return dfCount.groupby("Proceso")["Operario"].count()
+
+
+
+
+def trazabilidad(self, args, db_connection):
+
+  query_str1 = """SELECT j.j_number AS OP , CASE
+  WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
+  WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
+  WHEN tr.wt_resource LIKE \'%TRO%\' then \'Troquel\'
+  ELSE \'Acabados\' END AS \'Proceso\' , tr.wt_source_code AS Operario, tr.wt_started AS Fecha
+  FROM job200 j
+  INNER JOIN wo200 w ON j.j_number = w.wo_job
+  INNER JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
+  INNER JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
+  WHERE tr.wt_source = \'TS\' AND
+  tk.tk_code LIKE \'%TIR%\'
+  AND j.j_number IN	({_list})
+  GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
+  ORDER BY j.j_number;""".format(_list=args)
+
+  query_str2 = """SELECT j.j_number AS OP , CASE
+  WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
+  WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
+  WHEN tr.wt_resource LIKE \'%TRO%\' then \'Troquel\'
+  ELSE \'Acabados\' END AS \'Proceso\' , tr.wt_source_code AS Operario, tr.wt_started AS Fecha
+  FROM job200 j
+  INNER JOIN wo200 w ON j.j_number = w.wo_job
+  INNER JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
+  INNER JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
+  WHERE tr.wt_source = \'TS\' AND
+  tk.tk_code LIKE \'%TIR%\'
+  AND AND jb.j_booked_in BETWEEN {startdate} AND {endate}
+  GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
+  ORDER BY j.j_number;""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
+
+  query_str = query_str2 if type(args) is list else query_str1
+
+  try:
+    df = pd.read_sql_query(text(query_str), con = db_connection)
+
+    procesos = df.Procesos.unique()
+
+    procesosCount = __findLargest__(df)
+
+    print(procesosCount)
+
+    return df
+  
+  except Exception as e:
+    self.message.emit("Ha ocurrido un Error! Vuelva a Intentar, {}".format(e))
+    return
+
+def movimientos(self,args,path, db_connection):
 
   query_str1 = """SELECT
   Tabla1.*, Facturado.Qty
@@ -331,7 +392,7 @@ FROM
 
     dfmovimientosMasa = dfmovimientosMasa[['j_number', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
     'Perdida Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)','Unidades Totales','Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas'
-  ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)']]
+    ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)']]
 
     
 
@@ -350,6 +411,9 @@ FROM
     _path = os.path.join(path if len(path)> 0 else os.getcwd(), "movimientos_FSC_{}.xlsx".format(datetime.now().strftime("%Y%m%d-%H%M%S")))
 
     _path = _path.replace('/','//') if len(path) > 0 else _path.replace('\\','//')
+
+
+    dfTrazabilidad = trazabilidad(self, args, _path, db_connection)
 
     with pd.ExcelWriter(_path, engine='xlsxwriter') as writer:
       # dfmovimientosMasa.to_excel(writer, sheet_name="Datos", index = False)
@@ -382,7 +446,9 @@ FROM
 
       # Make the columns wider for clarity.
       worksheet.set_column(0, max_col-1, 12)
-    
+
+      dfTrazabilidad.to_excel(writer, sheet_name="Trazabilidad", index=False)
+
     self.message.emit("Reporte Generado!")
   
   except Exception as e:
