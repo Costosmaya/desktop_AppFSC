@@ -7,7 +7,7 @@ from UI.design import Ui_MainWindow
 
 from UI.dialog import Ui_Dialog
 
-from movimientos_FSC import movimientos, trazabilidad, db_connectionObj
+from movimientos_FSC import movimientos, db_connectionObj
 
 mutex = QMutex()
 
