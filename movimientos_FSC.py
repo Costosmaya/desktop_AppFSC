@@ -1,6 +1,8 @@
 # Python Notebook - Resumen movimientos de Papel FSC
 
+from typing import List
 import pandas as pd
+from pandas.io.pytables import dropna_doc
 
 from sqlalchemy import create_engine, text
 
@@ -12,10 +14,97 @@ import math
 
 from sqlalchemy.sql.expression import false
 
-def movimientos(self,args,path):
+def db_connectionObj():
   db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/pruebas?charset=utf8'
 
   db_connection = create_engine(db_connection_str)
+
+  return db_connection
+
+def __findLargest__(df):
+  dfCount = pd.DataFrame(df)
+
+  dfCount = dfCount.groupby("Proceso")["Operario"].count()
+
+  return dfCount
+
+
+
+
+def trazabilidad(self, args, db_connection):
+
+  query_str1 = """SELECT j.j_number AS OP , CASE
+  WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
+  WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
+  WHEN tr.wt_resource LIKE \'%TRO%\' then \'Troquel\'
+  ELSE \'Revisado\' END AS \'Proceso\' , tr.wt_source_code AS Operario, tr.wt_started AS Fecha
+  FROM job200 j
+  INNER JOIN wo200 w ON j.j_number = w.wo_job
+  INNER JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
+  INNER JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
+  WHERE tr.wt_source = \'TS\' AND
+  (tk.tk_code LIKE \'%TIR%\' OR tk.tk_code LIKE \'%REVISADO%\')
+  AND j.j_number IN	({_list})
+  GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
+  ORDER BY j.j_number;""".format(_list=args)
+
+  query_str2 = """SELECT j.j_number AS OP , CASE
+  WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
+  WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
+  WHEN tr.wt_resource LIKE \'%TRO%\' then \'Troquel\'
+  ELSE \'Revisado\' END AS \'Proceso\' , tr.wt_source_code AS Operario, tr.wt_started AS Fecha
+  FROM job200 j
+  INNER JOIN wo200 w ON j.j_number = w.wo_job
+  INNER JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
+  INNER JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
+  WHERE tr.wt_source = \'TS\' AND
+  (tk.tk_code LIKE \'%TIR%\' OR tk.tk_code LIKE \'%REVISADO%\')
+  AND AND jb.j_booked_in BETWEEN {startdate} AND {endate}
+  GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
+  ORDER BY j.j_number;""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
+
+  query_str = query_str2 if type(args) is list else query_str1
+
+  try:
+    df = pd.read_sql_query(text(query_str), con = db_connection)
+  
+    Ops = df.OP.unique()
+
+    def checkName(s):
+      if "OP" in s:
+        return s
+      else:
+        return s+"_{}".format(proceso)
+    dfTrazabilidad = pd.DataFrame()
+    dfList = list()
+    for OP in Ops:
+      dfOp = df[df.OP == OP]
+      procesos = df["Proceso"].unique()
+      Tempdf = pd.DataFrame()
+      for index in range(len(procesos)):
+        proceso = procesos[index]
+
+        tempData = dfOp[dfOp.Proceso == proceso]
+        tempData = tempData.drop_duplicates(subset=["Operario"])
+        if (len(Tempdf.index)> 0):
+          tempData = tempData.rename(checkName, axis='columns').drop(columns = ['OP'])
+          Tempdf = pd.concat([Tempdf.reset_index(drop=True), tempData.reset_index(drop=True)],axis=1)
+        else:
+          Tempdf = tempData.rename(checkName, axis='columns')
+
+      dfList.append(Tempdf.reset_index(drop=True))
+    
+    dfTrazabilidad = pd.concat(dfList, axis=1)
+          
+
+      
+  
+    return dfTrazabilidad.fillna(0)
+  except Exception as e:
+    print("Se dió un problema: {}".format(e))
+    return
+
+def movimientos(self,args,path, db_connection):
 
   query_str1 = """SELECT
   Tabla1.*, Facturado.Qty
@@ -238,7 +327,7 @@ FROM
 
     dfDimensions['Masa por Pliego Prensa'] = dfDimensions['Área Pliego Prensa']*dfDimensions.Gramaje
     dfDimensions['Masa por Pliego Almacén'] = dfDimensions['Área Pliego Almacén']*dfDimensions.Gramaje
-    #dfDimensions.dropna(inplace=True)
+
     dfDimensions = dfDimensions.drop_duplicates(subset=['j_number'])
 
     dfTransformPress.insert(4, 'Cantidad_Total', dfTransformPress['Cantidad_Buenas']+dfTransformPress['Cantidad_Malas'])
@@ -331,7 +420,7 @@ FROM
 
     dfmovimientosMasa = dfmovimientosMasa[['j_number', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
     'Perdida Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)','Unidades Totales','Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas'
-  ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)']]
+    ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)']]
 
     
 
@@ -350,6 +439,9 @@ FROM
     _path = os.path.join(path if len(path)> 0 else os.getcwd(), "movimientos_FSC_{}.xlsx".format(datetime.now().strftime("%Y%m%d-%H%M%S")))
 
     _path = _path.replace('/','//') if len(path) > 0 else _path.replace('\\','//')
+
+
+    dfTrazabilidad = trazabilidad(self, args, db_connection)
 
     with pd.ExcelWriter(_path, engine='xlsxwriter') as writer:
       # dfmovimientosMasa.to_excel(writer, sheet_name="Datos", index = False)
@@ -382,7 +474,22 @@ FROM
 
       # Make the columns wider for clarity.
       worksheet.set_column(0, max_col-1, 12)
-    
+
+
+      worksheet2 = workbook.add_worksheet('Trazabilidad')
+
+      (max_row2, max_col2) = dfTrazabilidad.shape
+
+      cell_format4 = workbook.add_format()
+      cell_format4.set_num_format('d/mm/yyyy h:mm')
+
+      cell_format.set_bold()
+
+      column_settings2 = [{'header': column, 'header_format': cell_format,'format': None if "Fecha" not in column else cell_format4} for column in dfTrazabilidad.columns]
+
+      worksheet2.add_table(0,0,max_row2, max_col2-1, {'data': dfTrazabilidad.values.tolist(), 'style':None, 'columns': column_settings2})
+      worksheet2.set_column(0, max_col2-1,18)
+
     self.message.emit("Reporte Generado!")
   
   except Exception as e:
