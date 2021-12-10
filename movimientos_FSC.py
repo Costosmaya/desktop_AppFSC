@@ -1,6 +1,8 @@
 # Python Notebook - Resumen movimientos de Papel FSC
 
+from typing import List
 import pandas as pd
+from pandas.io.pytables import dropna_doc
 
 from sqlalchemy import create_engine, text
 
@@ -24,7 +26,7 @@ def __findLargest__(df):
 
   dfCount = dfCount.groupby("Proceso")["Operario"].count()
 
-  return str(dfCount.idxmax())
+  return dfCount
 
 
 
@@ -65,29 +67,41 @@ def trazabilidad(self, args, db_connection):
 
   try:
     df = pd.read_sql_query(text(query_str), con = db_connection)
-
-    procesos = df.Proceso.unique().tolist()
-
-    procesoMax = __findLargest__(df.copy())
-
-    procesos = df[df.Proceso != "{}".format(procesoMax)].Proceso.unique()
-
-    dfTrazabilidad = df[df.Proceso == "{}".format(procesoMax)]
+  
+    Ops = df.OP.unique()
 
     def checkName(s):
       if "OP" in s:
         return s
       else:
         return s+"_{}".format(proceso)
+    dfTrazabilidad = pd.DataFrame()
+    dfList = list()
+    for OP in Ops:
+      dfOp = df[df.OP == OP]
+      procesos = df["Proceso"].unique()
+      Tempdf = pd.DataFrame()
+      for index in range(len(procesos)):
+        proceso = procesos[index]
 
-    for  index in  range(len(procesos)):
-      proceso = procesos[index]
-      dfTrazabilidad = pd.DataFrame.merge(dfTrazabilidad, right=df[df.Proceso == proceso].rename(checkName, axis='columns'),how='left',left_on='OP', right_on='OP')
+        tempData = dfOp[dfOp.Proceso == proceso]
+        tempData = tempData.drop_duplicates(subset=["Operario"])
+        if (len(Tempdf.index)> 0):
+          tempData = tempData.rename(checkName, axis='columns').drop(columns = ['OP'])
+          Tempdf = pd.concat([Tempdf.reset_index(drop=True), tempData.reset_index(drop=True)],axis=1)
+        else:
+          Tempdf = tempData.rename(checkName, axis='columns')
 
-    return dfTrazabilidad.drop_duplicates()
+      dfList.append(Tempdf.reset_index(drop=True))
+    
+    dfTrazabilidad = pd.concat(dfList, axis=1)
+          
+
+      
   
+    return dfTrazabilidad.fillna(0)
   except Exception as e:
-    print(e)
+    print("Se dió un problema: {}".format(e))
     return
 
 def movimientos(self,args,path, db_connection):
