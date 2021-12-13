@@ -34,6 +34,7 @@ def __findLargest__(df):
 def trazabilidad(self, args, db_connection):
 
   query_str1 = """SELECT j.j_number AS OP , CASE
+  WHEN tr.wt_resource LIKE \'GUILL%\' then \'Guillotina\'
   WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
   WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
   WHEN tr.wt_resource LIKE \'%TRO%\' then \'Troquel\'
@@ -49,6 +50,7 @@ def trazabilidad(self, args, db_connection):
   ORDER BY j.j_number;""".format(_list=args)
 
   query_str2 = """SELECT j.j_number AS OP , CASE
+  WHEN tr.wt_resource LIKE \'GUILL%\' then \'Guillotina\'
   WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
   WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
   WHEN tr.wt_resource LIKE \'%TRO%\' then \'Troquel\'
