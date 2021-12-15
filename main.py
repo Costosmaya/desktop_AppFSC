@@ -67,7 +67,6 @@ class mainWindow(QtWidgets.QMainWindow):
         if choiceF:
             choiceRange = self.ui.dateChoser.isChecked()
             args = ['\''+str(self.ui.sdateEdit.date().toPyDate())+'\'', '\''+str(self.ui.edateEdit.date().toPyDate())+'\''] if choiceRange else ['\''+str(self.ui.sdateEdit.date().toPyDate())+'\'']
-
             return args;
         elif choiceOp:
             args = self.ui.lineEdit.text()

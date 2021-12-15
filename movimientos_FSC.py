@@ -59,9 +59,9 @@ def trazabilidad(self, args, db_connection):
   INNER JOIN wo200 w ON j.j_number = w.wo_job
   INNER JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
   INNER JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
-  WHERE tr.wt_source = \'TS\' AND
-  (tk.tk_code LIKE \'%TIR%\' OR tk.tk_code LIKE \'%REVISADO%\')
-  AND AND jb.j_booked_in BETWEEN {startdate} AND {endate}
+  WHERE tr.wt_source = \'TS\' 
+  AND (tk.tk_code LIKE \'%TIR%\' OR tk.tk_code LIKE \'%REVISADO%\')
+  AND j.j_booked_in BETWEEN {startdate} AND {endate}
   GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
   ORDER BY j.j_number;""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
 
@@ -95,12 +95,13 @@ def trazabilidad(self, args, db_connection):
           Tempdf = tempData.rename(checkName, axis='columns')
 
       dfList.append(Tempdf.reset_index(drop=True))
-    
-    dfTrazabilidad = pd.concat(dfList, axis=1)
-          
 
       
-  
+    
+    dfTrazabilidad = pd.concat(dfList, axis=0)
+    dfTrazabilidad = dfTrazabilidad[['OP','Proceso_Guillotina','Operario_Guillotina','Fecha_Guillotina','Proceso_Prensas','Operario_Prensas','Fecha_Prensas',
+    'Proceso_Troquel','Operario_Troquel','Fecha_Troquel','Proceso_Pegado de Cajas','Operario_Pegado de Cajas','Fecha_Pegado de Cajas','Proceso_Revisado','Operario_Revisado','Fecha_Revisado']]   
+          
     return dfTrazabilidad.fillna(0)
   except Exception as e:
     print("Se dió un problema: {}".format(e))
