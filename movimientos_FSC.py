@@ -1,8 +1,8 @@
 # Python Notebook - Resumen movimientos de Papel FSC
 
-from typing import List
 import pandas as pd
-from pandas.io.pytables import dropna_doc
+
+from itertools import chain
 
 from sqlalchemy import create_engine, text
 
@@ -10,30 +10,18 @@ from datetime import datetime
 
 import os
 
-import math
-
-from sqlalchemy.sql.expression import false
-
 def db_connectionObj():
-  db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/mayaprin?charset=utf8'
+  db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/pruebas?charset=utf8'
 
   db_connection = create_engine(db_connection_str)
 
   return db_connection
 
-def __findLargest__(df):
-  dfCount = pd.DataFrame(df)
-
-  dfCount = dfCount.groupby("Proceso")["Operario"].count()
-
-  return dfCount
 
 
+def trazabilidad(self, ops, db_connection):
 
-
-def trazabilidad(self, args, db_connection):
-
-  query_str1 = """SELECT j.j_number AS OP , CASE
+  query_str = """SELECT j.j_number AS OP , CASE
   WHEN tr.wt_resource LIKE \'GUILL%\' then \'Guillotina\'
   WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
   WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
@@ -47,60 +35,46 @@ def trazabilidad(self, args, db_connection):
   (tk.tk_code LIKE \'%TIR%\' OR tk.tk_code LIKE \'%REVISADO%\')
   AND j.j_number IN	({_list})
   GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
-  ORDER BY j.j_number;""".format(_list=args)
-
-  query_str2 = """SELECT j.j_number AS OP , CASE
-  WHEN tr.wt_resource LIKE \'GUILL%\' then \'Guillotina\'
-  WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
-  WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
-  WHEN tr.wt_resource LIKE \'%TRO%\' then \'Troquel\'
-  ELSE \'Revisado\' END AS \'Proceso\' , tr.wt_source_code AS Operario, tr.wt_started AS Fecha
-  FROM job200 j
-  INNER JOIN wo200 w ON j.j_number = w.wo_job
-  INNER JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
-  INNER JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
-  WHERE tr.wt_source = \'TS\' 
-  AND (tk.tk_code LIKE \'%TIR%\' OR tk.tk_code LIKE \'%REVISADO%\')
-  AND j.j_booked_in BETWEEN {startdate} AND {endate}
-  GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
-  ORDER BY j.j_number;""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
-
-  query_str = query_str2 if type(args) is list else query_str1
+  ORDER BY j.j_number;""".format(_list=','.join(['\'{}\''.format(op) for op in ops]))
 
   try:
     df = pd.read_sql_query(text(query_str), con = db_connection)
   
     Ops = df.OP.unique()
 
-    def checkName(s):
+    def format_title(s):
       if "OP" in s:
         return s
       else:
         return s+"_{}".format(proceso)
     dfTrazabilidad = pd.DataFrame()
-    dfList = list()
+    df_list = list()
     for OP in Ops:
       dfOp = df[df.OP == OP]
       procesos = df["Proceso"].unique()
-      Tempdf = pd.DataFrame()
+      proceso_df = pd.DataFrame()
       for index in range(len(procesos)):
         proceso = procesos[index]
 
-        tempData = dfOp[dfOp.Proceso == proceso]
-        tempData = tempData.drop_duplicates(subset=["Operario"])
-        if (len(Tempdf.index)> 0):
-          tempData = tempData.rename(checkName, axis='columns').drop(columns = ['OP'])
-          Tempdf = pd.concat([Tempdf.reset_index(drop=True), tempData.reset_index(drop=True)],axis=1)
+        temp_df = dfOp[dfOp.Proceso == proceso]
+        temp_df = temp_df.drop_duplicates(subset=["Operario"])
+        if (len(proceso_df.index)> 0):
+          temp_df = temp_df.rename(format_title, axis='columns').drop(columns = ['OP'])
+          proceso_df = pd.concat([proceso_df.reset_index(drop=True), temp_df.reset_index(drop=True)],axis=1)
         else:
-          Tempdf = tempData.rename(checkName, axis='columns')
+          proceso_df = temp_df.rename(format_title, axis='columns')
 
-      dfList.append(Tempdf.reset_index(drop=True))
+      df_list.append(proceso_df.reset_index(drop=True))
 
       
     
-    dfTrazabilidad = pd.concat(dfList, axis=0)
-    dfTrazabilidad = dfTrazabilidad[['OP','Proceso_Guillotina','Operario_Guillotina','Fecha_Guillotina','Proceso_Prensas','Operario_Prensas','Fecha_Prensas',
-    'Proceso_Troquel','Operario_Troquel','Fecha_Troquel','Proceso_Pegado de Cajas','Operario_Pegado de Cajas','Fecha_Pegado de Cajas','Proceso_Revisado','Operario_Revisado','Fecha_Revisado']]   
+    dfTrazabilidad = pd.concat(df_list, axis=0)
+
+    listProcesos = ['Guillotina','Prensas','Troquel','Pegado de Cajas','Revisado']
+
+    orderList = list(chain.from_iterable((f'Proceso_{Proceso}',f'Operario_{Proceso}',f'Fecha_{Proceso}') for Proceso in listProcesos if Proceso in procesos))
+    
+    dfTrazabilidad = dfTrazabilidad[['OP'] + orderList]   
           
     return dfTrazabilidad.fillna(0)
   except Exception as e:
@@ -180,22 +154,27 @@ FROM
         'TROPEQ TIR',
         'TROMED TIR',
         'TROGRD TIR',
-        'TROPLA TIR'
+        'TROPLA TIR',
+         'REVISADO',
+        'REVISADO2',
+        'REVISADO3',
+        'REVISADO 4',
+        'REVISADO5'
         
       )
       AND wt_source = 'TS'
-      AND jb.j_ucode1 IS NOT NULL 
-     AND jb.j_booked_in BETWEEN {startdate} AND {endate}
+      AND jb.j_ucode1 IS NOT NULL
     GROUP BY
       jb.j_number,
       tsk.tk_code
   ) AS Tabla1 LEFT JOIN (
-    SELECT ist.ist_job AS j_number, SUM(ist.ist_quantity) AS Qty
+    SELECT ist.ist_job AS j_number, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
 		FROM inv
 		INNER JOIN ist ON 
 		inv.inv_id = ist.ist_inv_id
 		GROUP BY ist.ist_job
-  ) AS Facturado ON Tabla1.j_number = Facturado.j_number;""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
+  ) AS Facturado ON Tabla1.j_number = Facturado.j_number
+   WHERE Facturado.inv_date BETWEEN {startdate} AND {endate};""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
 
 
   query_str2 = """SELECT
@@ -269,8 +248,12 @@ FROM
         'TROPEQ TIR',
         'TROMED TIR',
         'TROGRD TIR',
-        'TROPLA TIR'
-        
+        'TROPLA TIR',
+        'REVISADO',
+        'REVISADO2',
+        'REVISADO3',
+        'REVISADO 4',
+        'REVISADO5'
       )
       AND wt_source = 'TS'
       AND jb.j_ucode1 IS NOT NULL 
@@ -299,143 +282,177 @@ FROM
     df.fillna(0.0,inplace=True)
     df["Peso_Ejemplar"] = pd.to_numeric(df["Peso_Ejemplar"])/1000
 
-    dfTransform = df.copy()
-    dfTransform.drop(['Datos_Papel','Ancho', 'Alto', 'Gramaje','Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
-    dfDimensions = df.copy()
-    dfDimensions.drop(['Cantidad_Buenas', 'Cantidad_Malas','tk_code','Despacho_Bodega', 'Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
+    df_medidas = df.copy()
+    df_medidas.drop(['Cantidad_Buenas', 'Cantidad_Malas','tk_code','Despacho_Bodega', 'Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
 
-    dfDimensions["Dimensiones Prensa"] = dfDimensions.Datos_Papel.str.split(":", expand=True)[2].str.strip().str.split(",", expand=True)[0]
-    dfDimensions["Número_Pliegos"] = pd.to_numeric(dfDimensions.Datos_Papel.str.split(":", expand=True)[2].str.strip().str.split(",", expand=True)[1].str.split(" ", expand=True)[2])
-    dfDimensions.drop(columns=["Datos_Papel"], inplace=True)
+    df_medidas["Dimensiones Prensa"] = df_medidas.Datos_Papel.str.split(":", expand=True)[2].str.strip().str.split(",", expand=True)[0]
+    df_medidas["Número_Pliegos"] = pd.to_numeric(df_medidas.Datos_Papel.str.split(":", expand=True)[2].str.strip().str.split(",", expand=True)[1].str.split(" ", expand=True)[2])
+    df_medidas.drop(columns=["Datos_Papel"], inplace=True)
     pd.set_option('display.max_colwidth', None)
 
     self.progress.emit(30)
 
-    dfTransformPress = dfTransform[dfTransform["tk_code"].isin(["PRE CX-TIR","PRE XL-TIR", "PRE SM-TIR", "PREIND TIR" ])]
-    dfTransformPress
+    df_datos_prensas = df.copy()
 
-    def calcArea(x):
-      dims  = [int(s)/1000 for s in str(x).split() if s.isdigit()]
-      return pd.Series(dims, dtype='float64')
+    df_datos_prensas.drop(['Datos_Papel','Ancho', 'Alto', 'Gramaje','Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
+
+    df_datos_prensas = df_datos_prensas[df_datos_prensas["tk_code"].isin(["PRE CX-TIR","PRE XL-TIR", "PRE SM-TIR", "PREIND TIR" ])]
+
+    def calc_area(x):
+      measures  = [int(s)/1000 for s in str(x).split() if s.isdigit()]
+      return pd.Series(measures, dtype='float64')
       
-    dfDimensions[["Alto Prensa", "Ancho Prensa"]] = dfDimensions["Dimensiones Prensa"].apply(calcArea)
-    dfDimensions.drop(columns=["Dimensiones Prensa"], inplace=True)
+    df_medidas[["Alto Prensa", "Ancho Prensa"]] = df_medidas["Dimensiones Prensa"].apply(calc_area)
+    df_medidas.drop(columns=["Dimensiones Prensa"], inplace=True)
 
-    dfDimensions.Ancho = dfDimensions.Ancho.transform(lambda x: x/1000)
-    dfDimensions.Alto = dfDimensions.Alto.transform(lambda x: x/1000)
-    dfDimensions.Gramaje = dfDimensions.Gramaje.transform(lambda x: x/1000)
-    dfDimensions['Área Pliego Almacén'] = dfDimensions.Ancho * dfDimensions.Alto
-    dfDimensions['Área Pliego Prensa'] = dfDimensions['Alto Prensa'] * dfDimensions['Ancho Prensa']
-    dfDimensions.drop(columns=['Alto','Ancho', 'Alto Prensa', 'Ancho Prensa'], inplace=True)
+    df_medidas.Ancho = df_medidas.Ancho.transform(lambda x: x/1000)
+    df_medidas.Alto = df_medidas.Alto.transform(lambda x: x/1000)
+    df_medidas.Gramaje = df_medidas.Gramaje.transform(lambda x: x/1000)
+    df_medidas['Área Pliego Almacén'] = df_medidas.Ancho * df_medidas.Alto
+    df_medidas['Área Pliego Prensa'] = df_medidas['Alto Prensa'] * df_medidas['Ancho Prensa']
+    df_medidas.drop(columns=['Alto','Ancho', 'Alto Prensa', 'Ancho Prensa'], inplace=True)
 
-    dfDimensions['Masa por Pliego Prensa'] = dfDimensions['Área Pliego Prensa']*dfDimensions.Gramaje
-    dfDimensions['Masa por Pliego Almacén'] = dfDimensions['Área Pliego Almacén']*dfDimensions.Gramaje
+    df_medidas['Masa por Pliego Prensa'] = df_medidas['Área Pliego Prensa']*df_medidas.Gramaje
+    df_medidas['Masa por Pliego Almacén'] = df_medidas['Área Pliego Almacén']*df_medidas.Gramaje
 
-    dfDimensions = dfDimensions.drop_duplicates(subset=['j_number'])
+    df_medidas = df_medidas.drop_duplicates(subset=['j_number'])
 
-    dfTransformPress.insert(4, 'Cantidad_Total', dfTransformPress['Cantidad_Buenas']+dfTransformPress['Cantidad_Malas'])
+    df_datos_prensas.insert(4, 'Cantidad_Total', df_datos_prensas['Cantidad_Buenas']+df_datos_prensas['Cantidad_Malas'])
 
     self.progress.emit(40)
 
 
-    df_merged = pd.merge(left=dfTransformPress, right=dfDimensions, how='left', left_on='j_number', right_on='j_number')
+    df_datos_comb = pd.merge(left=df_datos_prensas, right=df_medidas, how='left', left_on='j_number', right_on='j_number')
 
 
-    dfIniciales = df_merged.copy()
+    df_despacho = df_datos_comb.copy()
 
-    dfIniciales = dfIniciales.drop_duplicates(subset=['j_number'])
+    df_despacho = df_despacho.drop_duplicates(subset=['j_number'])
 
-    dfIniciales.drop(columns=['Masa por Pliego Prensa', 'Cantidad_Buenas', 'Cantidad_Malas', 'Cantidad_Total'], inplace=True)
+    df_despacho.drop(columns=['Masa por Pliego Prensa', 'Cantidad_Buenas', 'Cantidad_Malas', 'Cantidad_Total'], inplace=True)
 
-    dfIniciales['Merma Corte Inicial (Kg)'] = (dfIniciales['Área Pliego Almacén'] - (dfIniciales['Área Pliego Prensa']*dfIniciales['Número_Pliegos'])) * dfIniciales['Gramaje']
+    df_despacho['Merma Corte Inicial (Kg)'] = (df_despacho['Área Pliego Almacén'] - (df_despacho['Área Pliego Prensa']*df_despacho['Número_Pliegos'])) * df_despacho['Gramaje']
 
-    dfIniciales['Despachos de Bodega (Kg)'] = dfIniciales.Despacho_Bodega * dfIniciales['Masa por Pliego Almacén']
+    df_despacho['Despachos de Bodega (Kg)'] = df_despacho.Despacho_Bodega * df_despacho['Masa por Pliego Almacén']
 
-    dfIniciales = dfIniciales[['j_number','Despacho_Bodega','Despachos de Bodega (Kg)','Merma Corte Inicial (Kg)']]
+    df_despacho = df_despacho[['j_number','Despacho_Bodega','Despachos de Bodega (Kg)','Merma Corte Inicial (Kg)']]
 
-    dfIniciales['Fracción Merma Corte Inicial'] = dfIniciales['Merma Corte Inicial (Kg)'] / dfIniciales['Despachos de Bodega (Kg)']
+    df_despacho['Fracción Merma Corte Inicial'] = df_despacho['Merma Corte Inicial (Kg)'] / df_despacho['Despachos de Bodega (Kg)']
 
-    dfPrensas = df_merged.copy()
-    dfPrensas = dfPrensas.drop_duplicates(subset=['j_number'])
-    dfPrensas.drop(columns=['Gramaje','tk_code','Área Pliego Almacén','Área Pliego Prensa', 'Masa por Pliego Almacén', 'Despacho_Bodega', 'Número_Pliegos'], inplace=True)
+    df_datos_pre = df_datos_comb.copy()
+    df_datos_pre = df_datos_pre.drop_duplicates(subset=['j_number'])
+    df_datos_pre.drop(columns=['Gramaje','tk_code','Área Pliego Almacén','Área Pliego Prensa', 'Masa por Pliego Almacén', 'Despacho_Bodega', 'Número_Pliegos'], inplace=True)
 
 
     self.progress.emit(50)
 
-    dfMergedT = pd.merge(left=dfIniciales, right=dfPrensas, how="inner", left_on="j_number", right_on="j_number")
+    df_impresion = pd.merge(left=df_despacho, right=df_datos_prensas, how="inner", left_on="j_number", right_on="j_number")
 
 
-    dfMergedT.insert(8,"Material Impresión (Kg)", dfMergedT['Despachos de Bodega (Kg)'] - dfMergedT['Merma Corte Inicial (Kg)'])
-    dfMergedT['Perdida Impresión (Kg)'] = dfMergedT['Cantidad_Malas'] * dfMergedT['Masa por Pliego Prensa']
+    df_impresion.insert(8,"Material Impresión (Kg)", df_impresion['Despachos de Bodega (Kg)'] - df_impresion['Merma Corte Inicial (Kg)'])
+    df_impresion['Perdida Impresión (Kg)'] = df_impresion['Cantidad_Malas'] * df_impresion['Masa por Pliego Prensa']
 
-    dfMergedT['Pliegos para Arreglo e Impresión'] = round(dfMergedT['Material Impresión (Kg)'] / dfMergedT['Masa por Pliego Prensa'],0)
+    df_impresion['Pliegos para Arreglo e Impresión'] = round(df_impresion['Material Impresión (Kg)'] / df_impresion['Masa por Pliego Prensa'],0)
 
 
-    dfMergedT['Fracción pérdida Impresión'] = dfMergedT['Perdida Impresión (Kg)'] / dfMergedT['Material Impresión (Kg)']
-    dfMergedT.drop(columns=['Cantidad_Total', 'Masa por Pliego Prensa', 'Cantidad_Buenas', 'Cantidad_Malas'], inplace=True)
+    df_impresion['Fracción pérdida Impresión'] = df_impresion['Perdida Impresión (Kg)'] / df_impresion['Material Impresión (Kg)']
+    df_impresion.drop(columns=['Cantidad_Total', 'Masa por Pliego Prensa', 'Cantidad_Buenas', 'Cantidad_Malas'], inplace=True)
 
 
     self.progress.emit(65)
 
-    dfPCajas = df.copy()
-    dfPCajas.drop(['Datos_Papel','Ancho', 'Alto', 'Gramaje', 'Despacho_Bodega'], axis=1, inplace=True)
-    dfPCajas = dfPCajas[dfPCajas["tk_code"].isin(['PCAJ FON G','PCAJ FON M','PCAJ FON P','PCAJ LAT G','PCAJ LAT P','PCAR N','PCAR TS',
+    df_p_cajas = df.copy()
+    df_p_cajas.drop(['Datos_Papel','Ancho', 'Alto', 'Gramaje', 'Despacho_Bodega'], axis=1, inplace=True)
+    df_p_cajas = df_p_cajas[df_p_cajas["tk_code"].isin(['PCAJ FON G','PCAJ FON M','PCAJ FON P','PCAJ LAT G','PCAJ LAT P','PCAR N','PCAR TS',
     'PEGTT','PINS SISA','H TIR 4ESQ','H TIR FG','H TIR FM','H TIR FP','H TIR LG','H TIR LP','D TIR 2L','D TIR 4ESQ','D TIR FG','D TIR FM',
     'D TIR FP','D TIR LG','D TIR LP'])]
 
-    dfPCajas['Masa Salida Pegado Cajas (kg)'] = dfPCajas['Cantidad_Buenas'] * dfPCajas['Peso_Ejemplar']
-    dfPCajas['Masa Total Cajas (kg)'] = (dfPCajas['Cantidad_Buenas'] +dfPCajas['Cantidad_Malas'])* dfPCajas['Peso_Ejemplar']
-    dfPCajas['Merma Pegado Cajas (kg)'] = (dfPCajas['Cantidad_Malas'] * dfPCajas['Peso_Ejemplar'])
-    dfPCajas['Unidades Totales'] = dfPCajas['Cantidad_Buenas'] + dfPCajas['Cantidad_Malas']
-    dfPCajas['Fracción Merma Pegado Cajas'] = dfPCajas['Merma Pegado Cajas (kg)']/dfPCajas['Masa Total Cajas (kg)']
-    dfPCajas = dfPCajas[['j_number','Unidades Totales', 'Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas', 'Masa Total Cajas (kg)']]
+
+    df_p_cajas['Masa Salida Pegado Cajas (kg)'] = (df_p_cajas['Cantidad_Buenas'] * df_p_cajas['Peso_Ejemplar']) if len(df_p_cajas.index) > 0 else 0
+    df_p_cajas['Masa Total Cajas (kg)'] = ((df_p_cajas['Cantidad_Buenas'] +df_p_cajas['Cantidad_Malas'])* df_p_cajas['Peso_Ejemplar']) if len(df_p_cajas.index) > 0 else 0
+    df_p_cajas['Merma Pegado Cajas (kg)'] = (df_p_cajas['Cantidad_Malas'] * df_p_cajas['Peso_Ejemplar']) if len(df_p_cajas.index) > 0 else 0
+    df_p_cajas['Unidades Totales'] = (df_p_cajas['Cantidad_Buenas'] + df_p_cajas['Cantidad_Malas']) if len(df_p_cajas.index) > 0 else 0
+    df_p_cajas['Fracción Merma Pegado Cajas'] = (df_p_cajas['Merma Pegado Cajas (kg)']/df_p_cajas['Masa Total Cajas (kg)']) if len(df_p_cajas.index) > 0 else 0
+    df_p_cajas = df_p_cajas[['j_number','Unidades Totales', 'Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas', 'Masa Total Cajas (kg)']]
+
 
     self.progress.emit(75)
 
 
-    dfTroquel = df.copy()
-    dfTroquel.drop(['Datos_Papel','Ancho', 'Alto', 'Gramaje', 'Despacho_Bodega'], axis=1, inplace=True)
-    dfTroquel = dfTroquel[dfTroquel["tk_code"].isin(['TROPEQ TIR','TROMED TIR','TROGRD TIR','TROPLA TIR'])]
+    df_troquelado = df.copy()
+    df_troquelado.drop(['Datos_Papel','Ancho', 'Alto', 'Gramaje', 'Despacho_Bodega'], axis=1, inplace=True)
+    df_troquelado = df_troquelado[df_troquelado["tk_code"].isin(['TROPEQ TIR','TROMED TIR','TROGRD TIR','TROPLA TIR'])]
 
-    dfTroquel = pd.merge(left= dfTroquel, right=dfPrensas[['j_number', 'Masa por Pliego Prensa']], how='left', left_on='j_number', right_on = 'j_number')
+    df_troquelado = pd.merge(left= df_troquelado, right=df_datos_prensas[['j_number', 'Masa por Pliego Prensa']], how='left', left_on='j_number', right_on = 'j_number')
 
-    dfTroquel['Masa de material conforme facturado (Kg)'] = dfTroquel['Qty'] * dfTroquel['Peso_Ejemplar']
+    df_troquelado['Masa de material conforme facturado (Kg)'] = df_troquelado['Qty'] * df_troquelado['Peso_Ejemplar']
 
-    dfTroquel['Masa Salida Troquel (kg)'] = (dfTroquel['Cantidad_Buenas']+dfTroquel['Cantidad_Malas']) * dfTroquel['Masa por Pliego Prensa']
+    df_troquelado['Masa Salida Troquel (kg)'] = (df_troquelado['Cantidad_Buenas']+df_troquelado['Cantidad_Malas']) * df_troquelado['Masa por Pliego Prensa']
 
-    dfTroquel['Pliegos para Troquelado'] = dfTroquel['Cantidad_Buenas'] + dfTroquel['Cantidad_Malas']
+    df_troquelado['Pliegos para Troquelado'] = df_troquelado['Cantidad_Buenas'] + df_troquelado['Cantidad_Malas']
 
-    dfTroquel = dfTroquel[['j_number','Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Qty','Masa de material conforme facturado (Kg)']]
+    df_troquelado = df_troquelado[['j_number','Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Qty','Masa de material conforme facturado (Kg)']]
 
 
-    dfmovimientosMasa = pd.merge(left=dfMergedT, right=dfTroquel, how='left', left_on='j_number', right_on = 'j_number')
+    df_consolidado_movimientos = pd.merge(left=df_impresion, right=df_troquelado, how='left', left_on='j_number', right_on = 'j_number')
+
+    df_revision = df.copy()
+
+    df_revision.drop(['Datos_Papel','Ancho', 'Alto', 'Gramaje', 'Despacho_Bodega','Qty'], axis=1, inplace=True)
+
+    df_revision = df_revision[df_revision["tk_code"].isin(['REVISADO','REVISADO2','REVISADO3','REVISADO 4','REVISADO5'])]
+
+    df_revision = df_revision.groupby(by="j_number").sum()
+
+    df_revision['Masa pérdida Revisión'] =  df_revision['Cantidad_Malas']*df_revision['Peso_Ejemplar'] if len(df_revision.index) > 0 else 0
 
 
     self.progress.emit(85)
 
-    dfmovimientosMasa = pd.merge(left=dfmovimientosMasa, right=dfPCajas, how='left', left_on='j_number', right_on = 'j_number')
-    dfmovimientosMasa['Merma Limpieza Troquel (kg)'] = dfmovimientosMasa['Masa Salida Troquel (kg)'] - dfmovimientosMasa['Masa Total Cajas (kg)']
+    df_consolidado_movimientos = (pd.merge(left=df_consolidado_movimientos, right=df_p_cajas, how='left', left_on='j_number', right_on = 'j_number')) if len(df_p_cajas.index) > 0 else df_consolidado_movimientos
 
-    dfmovimientosMasa['Fracción de pérdida por limpieza de troquel (%)'] = dfmovimientosMasa['Merma Limpieza Troquel (kg)']/(dfmovimientosMasa['Masa Salida Troquel (kg)']+ dfmovimientosMasa['Merma Limpieza Troquel (kg)'])
+    def calculateMerma(row):
+      if len(df_p_cajas.index) > 0:
+        if(row['Masa Total Cajas (kg)']> 0 ):
+          return row['Masa Salida Troquel (kg)'] - row['Masa Total Cajas (kg)']
+        else:
+          return row['Masa Salida Troquel (kg)'] - row['Masa de material conforme facturado (Kg)']
+      else:
+        return row['Masa Salida Troquel (kg)'] - row['Masa de material conforme facturado (Kg)']
 
-    dfmovimientosMasa['Pérdida por arreglo de Impresión (kg) 2'] = dfmovimientosMasa['Material Impresión (Kg)'] - dfmovimientosMasa['Masa Salida Troquel (kg)']
-    dfmovimientosMasa["Pérdida por  revisión (kg)"] = dfmovimientosMasa["Masa Salida Troquel (kg)"] - dfmovimientosMasa['Merma Limpieza Troquel (kg)'] -dfmovimientosMasa["Masa de material conforme facturado (Kg)"] - dfmovimientosMasa["Merma Pegado Cajas (kg)"]
+    
+    df_consolidado_movimientos = (pd.merge(left=df_consolidado_movimientos, right=df_revision, how='left', left_on='j_number', right_on = 'j_number')) if len(df_revision.index) > 0 else df_consolidado_movimientos
+ 
+    df_consolidado_movimientos['Merma Limpieza Troquel (kg)'] = df_consolidado_movimientos.apply(calculateMerma, axis=1)
 
-    dfmovimientosMasa = dfmovimientosMasa[['j_number', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
-    'Perdida Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)','Unidades Totales','Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas'
-    ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)']]
+    df_consolidado_movimientos['Merma Limpieza Troquel (kg)'] = df_consolidado_movimientos['Merma Limpieza Troquel (kg)'] - df_consolidado_movimientos['Masa pérdida Revisión']
+
+    df_consolidado_movimientos['Fracción de pérdida por limpieza de troquel (%)'] = (df_consolidado_movimientos['Merma Limpieza Troquel (kg)']/(df_consolidado_movimientos['Masa Salida Troquel (kg)']+ df_consolidado_movimientos['Merma Limpieza Troquel (kg)']))
+    df_consolidado_movimientos['Pérdida por arreglo de Impresión (kg) 2'] = df_consolidado_movimientos['Material Impresión (Kg)'] - df_consolidado_movimientos['Masa Salida Troquel (kg)']
 
     
 
-    dfmovimientosMasa = dfmovimientosMasa.rename(columns={"j_number":"OP", "Despacho_Bodega":"Despacho de pliegos almacén", "Masa Salida Troquel (k)":"Masa material troquelado conforme", "Despachos de Bodega (Kg)":"Despachos de pliego almacén (Kg)",
+    
+
+    df_consolidado_movimientos['Pérdida por  revisión (kg)'] = df_consolidado_movimientos['Masa pérdida Revisión']
+
+    df_consolidado_movimientos = (df_consolidado_movimientos[['j_number', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
+    'Perdida Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)','Unidades Totales','Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas'
+    ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)']]) if len(df_p_cajas.index) > 0 else (df_consolidado_movimientos[['j_number', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
+    'Perdida Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)'
+    ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)']])
+
+    
+
+    df_consolidado_movimientos = df_consolidado_movimientos.rename(columns={"j_number":"OP", "Despacho_Bodega":"Despacho de pliegos almacén", "Masa Salida Troquel (k)":"Masa material troquelado conforme", "Despachos de Bodega (Kg)":"Despachos de pliego almacén (Kg)",
     "Merma Corte Inicial (Kg)":"Pérdida Corte Inicial por exceso (Kg)", "Fracción Merma Corte Inicial":"Fracción de pérdida por Corte Inicial (%)", "Material Impresión (Kg)":"Material para Arreglos e Impresión (Kg)",
     "Perdida Impresión (Kg)":"Pérdida por arreglo de  Impresión (Kg)","Fracción pérdida Impresión":"Fracción de pérdida por Impresión (%)", "Masa Salida Troquel (kg)":"Masa material para Troquelado(kg)",
     "Merma Limpieza Troquel (kg)":"Pérdida por Limpieza de Troquel (kg)","Merma Pegado Cajas (kg)":"Pérdida por  Pegado de Cajas (kg)", "Fracción Merma Pegado Cajas":"Fracción de pérdida por Pegado de Cajas"
     , 'Qty':'Unidades Facturadas', 'Unidades Totales':'Unidades Totales para pegue'})
 
-    dfmovimientosMasa['Fracción Material Conforme %'] = dfmovimientosMasa['Masa de material conforme facturado (Kg)'] / dfmovimientosMasa['Despachos de pliego almacén (Kg)']
+    df_consolidado_movimientos['Fracción Material Conforme %'] = df_consolidado_movimientos['Masa de material conforme facturado (Kg)'] / df_consolidado_movimientos['Despachos de pliego almacén (Kg)']
     
-    dfmovimientosMasa.fillna(0.0,inplace=True)
+    df_consolidado_movimientos.fillna(0.0,inplace=True)
 
     
 
@@ -443,11 +460,12 @@ FROM
 
     _path = _path.replace('/','//') if len(path) > 0 else _path.replace('\\','//')
 
+    ops = df_consolidado_movimientos["OP"].to_list()
 
-    dfTrazabilidad = trazabilidad(self, args, db_connection)
+
+    dfTrazabilidad = trazabilidad(self, ops, db_connection)
 
     with pd.ExcelWriter(_path, engine='xlsxwriter') as writer:
-      # dfmovimientosMasa.to_excel(writer, sheet_name="Datos", index = False)
 
       workbook = writer.book
       
@@ -468,14 +486,13 @@ FROM
       row_format1 = workbook.add_format()
       row_format1.set_num_format('#,##0.00')
 
-      (max_row, max_col) = dfmovimientosMasa.shape
+      (max_row, max_col) = df_consolidado_movimientos.shape
 
-      column_settings = [{'header': column, 'header_format': cell_format if "Fracción" not in column else cell_format2, 'format':row_format if "Fracción" in column else row_format1} for column in dfmovimientosMasa.columns]
+      column_settings = [{'header': column, 'header_format': cell_format if "Fracción" not in column else cell_format2, 'format':row_format if "Fracción" in column else row_format1} for column in df_consolidado_movimientos.columns]
 
 
-      worksheet.add_table(0, 0, max_row, max_col-1, {'data':dfmovimientosMasa.values.tolist(),'style':None,'columns': column_settings})
+      worksheet.add_table(0, 0, max_row, max_col-1, {'data':df_consolidado_movimientos.values.tolist(),'style':None,'columns': column_settings})
 
-      # Make the columns wider for clarity.
       worksheet.set_column(0, max_col-1, 12)
 
 
