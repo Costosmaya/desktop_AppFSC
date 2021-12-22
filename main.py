@@ -1,7 +1,9 @@
 from PyQt5 import QtWidgets, uic
 from PyQt5 import QtCore
-from PyQt5.QtCore import QObject, QThread, pyqtSignal, QMutex
+from PyQt5.QtCore import QObject, QRegExp, QThread, pyqtSignal, QMutex
 import sys
+
+from PyQt5.QtGui import QRegExpValidator
 
 from UI.design import Ui_MainWindow
 
@@ -54,6 +56,11 @@ class mainWindow(QtWidgets.QMainWindow):
         self.ui.getButton.clicked.connect(self.StartThread)
         self.dialog = Dialog()
         self.dialog_done = False
+        reg_ex = QRegExp("([0-9]+\,*)+")
+
+        input_validator = QRegExpValidator(reg_ex, self.ui.lineEdit)
+
+        self.ui.lineEdit.setValidator(input_validator)
     
     def pathChooser(self):
         directory = ""
