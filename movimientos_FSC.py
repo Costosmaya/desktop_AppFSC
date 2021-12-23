@@ -10,6 +10,15 @@ from datetime import datetime
 
 import os
 
+dateFilter_byDate_F = False
+
+def set_datefilter(Filter = False):
+
+  global dateFilter_byDate_F
+  dateFilter_byDate_F = Filter
+
+
+
 def db_connectionObj():
   db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/pruebas?charset=utf8'
 
@@ -44,9 +53,9 @@ def trazabilidad(self, ops, db_connection):
   try:
     df = pd.read_sql_query(text(query_str), con = db_connection)
 
-    dfProcesos = df.loc[:,set(['OP','Proceso','Operario','Fecha'])]
+    dfProcesos = df.loc[:,['OP','Proceso','Operario','Fecha']]
 
-    dfFacturas = df.loc[:,set(['OP','no_factura'])]
+    dfFacturas = df.loc[:,['OP','no_factura']]
 
     dfFacturas.drop_duplicates(subset=['no_factura'], inplace=True)
     Ops = dfProcesos.OP.unique()
@@ -85,7 +94,7 @@ def trazabilidad(self, ops, db_connection):
 
     dfTrazabilidad = pd.merge(dfTrazabilidad, right=dfFacturas, how='inner', on='OP') 
     
-    dfTrazabilidad = dfTrazabilidad.loc[:,set(['OP','no_factura'] + orderList)]
+    dfTrazabilidad = dfTrazabilidad.loc[:,['OP','no_factura'] + orderList]
 
       
           
@@ -191,8 +200,103 @@ FROM
   ) AS Facturado ON Tabla1.j_number = Facturado.j_number
    WHERE Facturado.inv_date BETWEEN {startdate} AND {endate};""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
 
-
   query_str2 = """SELECT
+  Tabla1.*, Facturado.Qty
+FROM
+  (
+    SELECT
+      jb.j_number,
+      jb.j_type,
+      tk_code,
+      SUM(tr.wt_good_qty) AS Cantidad_Buenas,
+      SUM(tr.wt_bad_qty) AS Cantidad_Malas,
+      jb.j_special_ins AS Datos_Papel,
+      cons_bodega.quantity AS Despacho_Bodega,
+      cons_bodega.Ancho,
+      cons_bodega.Alto,
+      cons_bodega.Gramaje,
+      jb.j_ucode4 AS Peso_Ejemplar
+    FROM
+      job200 jb
+      INNER JOIN wo200 wo ON jb.j_number = wo.wo_job
+      INNER JOIN wo_task200 tsk ON wo.wo_number = tsk.tk_wonum
+      LEFT JOIN wo_trans200 tr ON tsk.tk_id = tr.wt_task_id
+      LEFT JOIN (
+        SELECT
+          job200.j_number,
+          SUM(iss.quantity) AS quantity,
+          stk.itm_fvals_0 AS "Ancho",
+          stk.itm_fvals_1 AS "Alto",
+          stk.itm_fvals_2 AS "Gramaje"
+        FROM
+          req
+          INNER JOIN wo_task200 tk ON req.req_task_id = tk.tk_id
+          INNER JOIN wo200 ON tk.tk_wonum = wo200.wo_number
+          INNER JOIN job200 ON job200.j_number = wo200.wo_job
+          INNER JOIN iss ON req.id = iss.req_id
+          INNER JOIN itm_cls_view itm_ ON iss.item = itm_.itm_code
+          INNER JOIN stkitm stk ON itm_.itm_code = stk.itm_code
+        WHERE
+          itm_.itm_is_paper = 1
+        GROUP BY
+          job200.j_number
+      ) AS cons_bodega ON jb.j_number = cons_bodega.j_number
+    WHERE
+      j_status = "C"
+      AND tsk.tk_code IN (
+        'PRE XL-TIR',
+        'PRE CX-TIR',
+        'PRE SM-TIR',
+        'PCAJ FON G',
+        'PCAJ FON M',
+        'PCAJ FON P',
+        'PCAJ LAT G',
+        'PCAJ LAT P',
+        'PCAR N',
+        'PCAR TS',
+        'PEGTT',
+        'PINS SISA',
+        'H TIR 4ESQ',
+        'H TIR FG',
+        'H TIR FM',
+        'H TIR FP',
+        'H TIR LG',
+        'H TIR LP',
+        'D TIR 2L',
+        'D TIR 4ESQ',
+        'D TIR FG',
+        'D TIR FM',
+        'D TIR FP',
+        'D TIR LG',
+        'D TIR LP',
+        'TROPEQ TIR',
+        'TROMED TIR',
+        'TROGRD TIR',
+        'TROPLA TIR',
+         'REVISADO',
+        'REVISADO2',
+        'REVISADO3',
+        'REVISADO 4',
+        'REVISADO5',
+        'GUILL-TIR'
+        
+      )
+      AND wt_source = 'TS'
+      AND jb.j_ucode1 IS NOT NULL
+      AND jb.j_booked_in BETWEEN {startdate} AND {endate}
+    GROUP BY
+      jb.j_number,
+      tsk.tk_code
+  ) AS Tabla1 LEFT JOIN (
+    SELECT ist.ist_job AS j_number, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
+		FROM inv
+		INNER JOIN ist ON 
+		inv.inv_id = ist.ist_inv_id
+		GROUP BY ist.ist_job
+  ) AS Facturado ON Tabla1.j_number = Facturado.j_number;""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
+
+
+  query_str3 = """SELECT
   Tabla1.*, Facturado.Qty
 FROM
   (
@@ -286,7 +390,18 @@ FROM
 		GROUP BY ist.ist_job
   ) AS Facturado ON Tabla1.j_number = Facturado.j_number;""".format(_list=args)
 
-  query_str = query_str1 if type(args) is list else query_str2
+  global dateFilter_byDate_F
+
+  if type(args) is list:
+    if dateFilter_byDate_F:
+      query_str = query_str1
+    else:
+
+      query_str = query_str2
+  else:
+    query_str = query_str3
+
+  print(query_str)
   try:
     df = pd.read_sql_query(text(query_str), con = db_connection)
     self.progress.emit(25)

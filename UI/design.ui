@@ -46,12 +46,12 @@
          <rect>
           <x>40</x>
           <y>10</y>
-          <width>61</width>
+          <width>111</width>
           <height>21</height>
          </rect>
         </property>
         <property name="text">
-         <string>Fecha</string>
+         <string>Fecha Facturación</string>
         </property>
         <property name="checked">
          <bool>false</bool>
@@ -60,7 +60,7 @@
        <widget class="QRadioButton" name="opFButton">
         <property name="geometry">
          <rect>
-          <x>150</x>
+          <x>290</x>
           <y>10</y>
           <width>101</width>
           <height>21</height>
@@ -68,6 +68,19 @@
         </property>
         <property name="text">
          <string>No. Orden(es)</string>
+        </property>
+       </widget>
+       <widget class="QRadioButton" name="fechaIButton">
+        <property name="geometry">
+         <rect>
+          <x>170</x>
+          <y>10</y>
+          <width>91</width>
+          <height>21</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Fecha Ingreso</string>
         </property>
        </widget>
       </widget>
@@ -323,8 +336,8 @@
      <y>43</y>
     </hint>
     <hint type="destinationlabel">
-     <x>70</x>
-     <y>175</y>
+     <x>71</x>
+     <y>153</y>
     </hint>
    </hints>
   </connection>
@@ -339,8 +352,8 @@
      <y>44</y>
     </hint>
     <hint type="destinationlabel">
-     <x>85</x>
-     <y>314</y>
+     <x>86</x>
+     <y>252</y>
     </hint>
    </hints>
   </connection>
@@ -351,12 +364,12 @@
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>109</x>
-     <y>188</y>
+     <x>110</x>
+     <y>98</y>
     </hint>
     <hint type="destinationlabel">
-     <x>477</x>
-     <y>212</y>
+     <x>478</x>
+     <y>133</y>
     </hint>
    </hints>
   </connection>
@@ -367,12 +380,44 @@
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>228</x>
-     <y>44</y>
+     <x>301</x>
+     <y>52</y>
     </hint>
     <hint type="destinationlabel">
-     <x>209</x>
-     <y>270</y>
+     <x>210</x>
+     <y>252</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>fechaIButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>dateGroup</receiver>
+   <slot>setEnabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>205</x>
+     <y>41</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>191</x>
+     <y>109</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>fechaIButton</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>opGroup</receiver>
+   <slot>setDisabled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>219</x>
+     <y>43</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>244</x>
+     <y>174</y>
     </hint>
    </hints>
   </connection>

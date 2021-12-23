@@ -3,13 +3,13 @@ from PyQt5 import QtCore
 from PyQt5.QtCore import QObject, QRegExp, QThread, pyqtSignal, QMutex
 import sys
 
-from PyQt5.QtGui import QRegExpValidator
+from PyQt5.QtGui import QIcon, QRegExpValidator
 
 from UI.design import Ui_MainWindow
 
 from UI.dialog import Ui_Dialog
 
-from movimientos_FSC import movimientos, db_connectionObj
+from movimientos_FSC import movimientos, db_connectionObj, set_datefilter
 
 mutex = QMutex()
 
@@ -50,6 +50,8 @@ class mainWindow(QtWidgets.QMainWindow):
 
         self.ui = Ui_MainWindow()
 
+        self.setWindowIcon(QIcon('mayaprin.ico'))
+
         self.ui.setupUi(self)
 
         self.ui.dirButton.clicked.connect(self.pathChooser)
@@ -68,10 +70,12 @@ class mainWindow(QtWidgets.QMainWindow):
         self.ui.rutaLabel.setText(self.ui.rutaLabel.text().split(':')[0]+':'+directory)
     
     def generateArgs(self):
-        choiceF = self.ui.fechaFButton.isChecked()
+        choiceFF = self.ui.fechaFButton.isChecked()
         choiceOp = self.ui.opFButton.isChecked()
+        choiceFI = self.ui.fechaIButton.isChecked()
         args = ""
-        if choiceF:
+        if choiceFF or choiceFI:
+            set_datefilter(choiceFF)
             choiceRange = self.ui.dateChoser.isChecked()
             args = ['\''+str(self.ui.sdateEdit.date().toPyDate())+'\'', '\''+str(self.ui.edateEdit.date().toPyDate())+'\''] if choiceRange else ['\''+str(self.ui.sdateEdit.date().toPyDate())+'\'']
             return args;
