@@ -40,7 +40,7 @@ def trazabilidad(self, ops, db_connection):
   INNER JOIN wo200 w ON j.j_number = w.wo_job
   INNER JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
   INNER JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
-  INNER JOIN (SELECT ist.ist_job AS j_number, CONCAT(inv.inv_prefix,inv.inv_number) as no_factura
+  LEFT JOIN (SELECT ist.ist_job AS j_number, CONCAT(inv.inv_prefix,inv.inv_number) as no_factura
 		FROM inv
 		INNER JOIN ist ON 
 		inv.inv_id = ist.ist_inv_id) AS Facturas ON j.j_number = Facturas.j_number
@@ -92,7 +92,7 @@ def trazabilidad(self, ops, db_connection):
 
     orderList = list(chain.from_iterable((f'Proceso_{Proceso}',f'Operario_{Proceso}',f'Fecha_{Proceso}') for Proceso in listProcesos if Proceso in procesos))
 
-    dfTrazabilidad = pd.merge(dfTrazabilidad, right=dfFacturas, how='inner', on='OP') 
+    dfTrazabilidad = pd.merge(dfTrazabilidad, right=dfFacturas, how='left', on='OP') 
     
     dfTrazabilidad = dfTrazabilidad.loc[:,['OP','no_factura'] + orderList]
 
@@ -106,7 +106,7 @@ def trazabilidad(self, ops, db_connection):
 def movimientos(self,args,path, db_connection):
 
   query_str1 = """SELECT
-  Tabla1.*, Facturado.Qty
+  Tabla1.*, Facturado.Qty, Facturado.CQty
 FROM
   (
     SELECT
@@ -192,16 +192,21 @@ FROM
       jb.j_number,
       tsk.tk_code
   ) AS Tabla1 LEFT JOIN (
-    SELECT ist.ist_job AS j_number, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
-		FROM inv
-		INNER JOIN ist ON 
-		inv.inv_id = ist.ist_inv_id
-		GROUP BY ist.ist_job
+    SELECT j.j_number, chrge.CQty, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
+		FROM job200 j
+		LEFT JOIN ist ON 
+		j.j_number = ist.ist_job
+		LEFT JOIN inv ON ist.ist_inv_id = inv.inv_id
+		INNER JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
+		FROM job200 
+		INNER JOIN charge c ON job200.j_number = c.cg_job
+		GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
+		GROUP BY j.j_number
   ) AS Facturado ON Tabla1.j_number = Facturado.j_number
    WHERE Facturado.inv_date BETWEEN {startdate} AND {endate};""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
 
   query_str2 = """SELECT
-  Tabla1.*, Facturado.Qty
+  Tabla1.*, Facturado.Qty, Facturado.CQty
 FROM
   (
     SELECT
@@ -288,16 +293,21 @@ FROM
       jb.j_number,
       tsk.tk_code
   ) AS Tabla1 LEFT JOIN (
-    SELECT ist.ist_job AS j_number, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
-		FROM inv
-		INNER JOIN ist ON 
-		inv.inv_id = ist.ist_inv_id
-		GROUP BY ist.ist_job
+    SELECT j.j_number, chrge.CQty, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
+		FROM job200 j
+		LEFT JOIN ist ON 
+		j.j_number = ist.ist_job
+		LEFT JOIN inv ON ist.ist_inv_id = inv.inv_id
+		INNER JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
+		FROM job200 
+		INNER JOIN charge c ON job200.j_number = c.cg_job
+		GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
+		GROUP BY j.j_number
   ) AS Facturado ON Tabla1.j_number = Facturado.j_number;""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
 
 
   query_str3 = """SELECT
-  Tabla1.*, Facturado.Qty
+  Tabla1.*, Facturado.Qty, Facturado.CQty
 FROM
   (
     SELECT
@@ -383,11 +393,16 @@ FROM
       jb.j_number,
       tsk.tk_code
   ) AS Tabla1 LEFT JOIN (
-    SELECT ist.ist_job AS j_number, SUM(ist.ist_quantity) AS Qty
-		FROM inv
-		INNER JOIN ist ON 
-		inv.inv_id = ist.ist_inv_id
-		GROUP BY ist.ist_job
+    SELECT j.j_number, chrge.CQty, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
+		FROM job200 j
+		LEFT JOIN ist ON 
+		j.j_number = ist.ist_job
+		LEFT JOIN inv ON ist.ist_inv_id = inv.inv_id
+		INNER JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
+		FROM job200 
+		INNER JOIN charge c ON job200.j_number = c.cg_job
+		GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
+		GROUP BY j.j_number
   ) AS Facturado ON Tabla1.j_number = Facturado.j_number;""".format(_list=args)
 
   global dateFilter_byDate_F
@@ -405,6 +420,8 @@ FROM
     df = pd.read_sql_query(text(query_str), con = db_connection)
     self.progress.emit(25)
 
+    print(df)
+
     if(len(df.index) == 0):
       self.message.emit("No se encontraron datos!")
       return
@@ -412,6 +429,16 @@ FROM
     df.Datos_Papel.fillna("", inplace=True)
     df.fillna(0.0,inplace=True)
     df["Peso_Ejemplar"] = pd.to_numeric(df["Peso_Ejemplar"])/1000
+
+    def set_charge (row):
+      if(row['Qty'] == 0.0):
+        return row['CQty']
+      else:
+        return row['Qty']
+
+    df['Qty'] = df.apply(set_charge,axis=1)
+
+    df.drop(columns='CQty', inplace=True)
 
     df_medidas = df.copy()
     df_medidas.drop(['j_type','Cantidad_Buenas', 'Cantidad_Malas','tk_code','Despacho_Bodega', 'Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
