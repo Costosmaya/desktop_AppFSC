@@ -401,7 +401,6 @@ FROM
   else:
     query_str = query_str3
 
-  print(query_str)
   try:
     df = pd.read_sql_query(text(query_str), con = db_connection)
     self.progress.emit(25)
@@ -444,8 +443,10 @@ FROM
     df_medidas['Área Pliego Prensa'] = df_medidas['Alto Prensa'] * df_medidas['Ancho Prensa']
     df_medidas.drop(columns=['Alto','Ancho', 'Alto Prensa', 'Ancho Prensa'], inplace=True)
 
-    df_medidas['Masa por Pliego Prensa'] = df_medidas['Área Pliego Prensa']*df_medidas.Gramaje
     df_medidas['Masa por Pliego Almacén'] = df_medidas['Área Pliego Almacén']*df_medidas.Gramaje
+
+    df_medidas['Masa por Pliego Prensa'] = df_medidas['Área Pliego Prensa'] * df_medidas.Gramaje
+    
 
     df_medidas = df_medidas.drop_duplicates(subset=['j_number'])
 
@@ -478,7 +479,7 @@ FROM
 
     df_despacho.drop(columns=['Masa por Pliego Prensa', 'Cantidad_Buenas', 'Cantidad_Malas', 'Cantidad_Total'], inplace=True)
 
-    df_despacho['Merma Corte Inicial (Kg)'] = ((df_despacho['Área Pliego Almacén'] - (df_despacho['Área Pliego Prensa']*df_despacho['Número_Pliegos'])) * df_despacho['Gramaje']) + df_despacho['Masa Perdida (kg)']
+    df_despacho['Merma Corte Inicial (Kg)'] = (((df_despacho['Área Pliego Almacén'] - (df_despacho['Área Pliego Prensa']*df_despacho['Número_Pliegos'])) * df_despacho['Gramaje']) * df_despacho.Despacho_Bodega)  + df_despacho['Masa Perdida (kg)']
 
     df_despacho['Despachos de Bodega (Kg)'] = df_despacho.Despacho_Bodega * df_despacho['Masa por Pliego Almacén']
 
@@ -488,7 +489,7 @@ FROM
 
     df_datos_pre = df_datos_comb.copy()
     df_datos_pre = df_datos_pre.drop_duplicates(subset=['j_number'])
-    df_datos_pre.drop(columns=['Gramaje','tk_code','Área Pliego Almacén','Área Pliego Prensa', 'Masa por Pliego Almacén', 'Despacho_Bodega', 'Número_Pliegos'], inplace=True)
+    df_datos_pre.drop(columns=['Gramaje','tk_code','Área Pliego Almacén','Área Pliego Prensa', 'Despacho_Bodega'], inplace=True)
 
 
     self.progress.emit(50)
@@ -503,7 +504,7 @@ FROM
 
 
     df_impresion['Fracción pérdida Impresión'] = df_impresion['Perdida Impresión (Kg)'] / df_impresion['Material Impresión (Kg)']
-    df_impresion.drop(columns=['Cantidad_Total', 'Masa por Pliego Prensa', 'Cantidad_Buenas', 'Cantidad_Malas'], inplace=True)
+    df_impresion.drop(columns=['Cantidad_Total', 'Masa por Pliego Prensa', 'Cantidad_Buenas', 'Cantidad_Malas', 'Número_Pliegos','Masa por Pliego Almacén'], inplace=True)
 
 
     self.progress.emit(65)
