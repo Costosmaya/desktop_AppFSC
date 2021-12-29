@@ -20,7 +20,7 @@ def set_datefilter(Filter = False):
 
 
 def db_connectionObj():
-  db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/pruebas?charset=utf8'
+  db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/mayaprin?charset=utf8'
 
   db_connection = create_engine(db_connection_str)
 

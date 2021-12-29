@@ -3,6 +3,8 @@ from PyQt5 import QtCore
 from PyQt5.QtCore import QObject, QRegExp, QThread, pyqtSignal, QMutex
 import sys
 
+import ctypes
+
 from PyQt5.QtGui import QIcon, QRegExpValidator
 
 from UI.design import Ui_MainWindow
@@ -10,6 +12,10 @@ from UI.design import Ui_MainWindow
 from UI.dialog import Ui_Dialog
 
 from movimientos_FSC import movimientos, db_connectionObj, set_datefilter
+
+
+myappid = 'Mayaprin.ControlCOC.Movimientos.1.0'
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 mutex = QMutex()
 
@@ -51,6 +57,8 @@ class mainWindow(QtWidgets.QMainWindow):
         self.ui = Ui_MainWindow()
 
         self.setWindowIcon(QIcon('mayaprin.ico'))
+
+        
 
         self.ui.setupUi(self)
 
@@ -161,5 +169,5 @@ application.signal.connect(lambda: dialog.show_message(application.message))
 dialog.signal.connect(application.complete_dialog)
 
 
-
-sys.exit(app.exec())
+if __name__ == '__main__':
+    sys.exit(app.exec())
