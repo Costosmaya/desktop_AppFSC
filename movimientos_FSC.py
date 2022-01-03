@@ -20,7 +20,7 @@ def set_datefilter(Filter = False):
 
 
 def db_connectionObj():
-  db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/mayaprin?charset=utf8'
+  db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/pruebas?charset=utf8'
 
   db_connection = create_engine(db_connection_str)
 
@@ -30,7 +30,7 @@ def db_connectionObj():
 
 def trazabilidad(self, ops, db_connection):
 
-  query_str = """SELECT j.j_number AS OP ,CONCAT(j.j_title1, IFNULL(j.j_title2,'')) AS titulo,Facturas.no_factura, CASE
+  query_str = """SELECT j.j_number AS OP ,CONCAT(j.j_title1, IFNULL(j.j_title2,'')) AS titulo, CASE
   WHEN tr.wt_resource LIKE \'GUILL%\' then \'Guillotina\'
   WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
   WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
@@ -38,26 +38,35 @@ def trazabilidad(self, ops, db_connection):
   ELSE \'Revisado\' END AS \'Proceso\' , tr.wt_source_code AS Operario, tr.wt_started AS Fecha
   FROM job200 j
   INNER JOIN wo200 w ON j.j_number = w.wo_job
-  INNER JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
-  INNER JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
-  LEFT JOIN (SELECT ist.ist_job AS j_number, CONCAT(inv.inv_prefix,inv.inv_number) as no_factura
-		FROM inv
-		INNER JOIN ist ON 
-		inv.inv_id = ist.ist_inv_id) AS Facturas ON j.j_number = Facturas.j_number
+  LEFT JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
+  LEFT JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
   WHERE tr.wt_source = \'TS\' AND
   (tk.tk_code LIKE \'%TIR%\' OR tk.tk_code LIKE \'%REVISADO%\')
   AND j.j_number IN	({_list})
   GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
   ORDER BY j.j_number;""".format(_list=','.join(['\'{}\''.format(op) for op in ops]))
 
+  query_str1 = """SELECT ist.ist_job AS OP, CONCAT(inv.inv_prefix,inv.inv_number) as no_factura
+		FROM inv
+		INNER JOIN ist ON 
+		inv.inv_id = ist.ist_inv_id
+		WHERE ist.ist_job IN ({_list})""".format(_list=','.join(['\'{}\''.format(op) for op in ops]))
+
   try:
     df = pd.read_sql_query(text(query_str), con = db_connection)
 
+    dfFacturas = pd.read_sql_query(text(query_str1), con = db_connection)
+
+    if len(df.index) == 0:
+      return None
+
     dfProcesos = df.loc[:,['OP','Proceso','Operario','Fecha']]
 
-    dfFacturas = df.loc[:,['OP','titulo','no_factura']]
+    dfFacturas = pd.merge(left=dfFacturas, right=df.loc[:,['OP','titulo']], how='left', on='OP')
 
     dfFacturas.drop_duplicates(subset=['no_factura'], inplace=True)
+
+  
     Ops = dfProcesos.OP.unique()
 
     def format_title(s):
@@ -100,7 +109,7 @@ def trazabilidad(self, ops, db_connection):
           
     return dfTrazabilidad.fillna(0)
   except Exception as e:
-    print("Se dió un problema: {}".format(e))
+    print("Se dió un problema en trazabilidad: {}".format(e))
     return
 
 def movimientos(self,args,path, db_connection):
@@ -114,6 +123,7 @@ FROM
       CONCAT(jb.j_title1, IFNULL(jb.j_title2,'')) as titulo,
       jb.j_type,
       tk_code,
+      jb.j_ucode1,
       SUM(tr.wt_good_qty) AS Cantidad_Buenas,
       SUM(tr.wt_bad_qty) AS Cantidad_Malas,
       jb.j_special_ins AS Datos_Papel,
@@ -146,12 +156,12 @@ FROM
           INNER JOIN stkitm stk ON itm_.itm_code = stk.itm_code
         WHERE
           itm_.itm_is_paper = 1
+          AND YEAR(job200.j_booked_in) >= 2021
         GROUP BY
           job200.j_number
       ) AS cons_bodega ON jb.j_number = cons_bodega.j_number
     WHERE
-      j_status = "C"
-      AND tsk.tk_code IN (
+      tsk.tk_code IN (
         'PRE XL-TIR',
         'PRE CX-TIR',
         'PRE SM-TIR',
@@ -203,7 +213,9 @@ FROM
 		INNER JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
 		FROM job200 
 		INNER JOIN charge c ON job200.j_number = c.cg_job
+    WHERE YEAR(c.cg_date_created) >= 2021
 		GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
+    WHERE YEAR(j.j_booked_in) >= 2021
 		GROUP BY j.j_number
   ) AS Facturado ON Tabla1.j_number = Facturado.j_number
    WHERE Facturado.inv_date BETWEEN {startdate} AND {endate};""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
@@ -216,6 +228,7 @@ FROM
       jb.j_number,
       CONCAT(jb.j_title1, IFNULL(jb.j_title2,'')) as titulo,
       jb.j_type,
+		jb.j_ucode1,
       tk_code,
       SUM(tr.wt_good_qty) AS Cantidad_Buenas,
       SUM(tr.wt_bad_qty) AS Cantidad_Malas,
@@ -229,7 +242,7 @@ FROM
     FROM
       job200 jb
       INNER JOIN wo200 wo ON jb.j_number = wo.wo_job
-      INNER JOIN wo_task200 tsk ON wo.wo_number = tsk.tk_wonum
+      LEFT JOIN wo_task200 tsk ON wo.wo_number = tsk.tk_wonum
       LEFT JOIN wo_trans200 tr ON tsk.tk_id = tr.wt_task_id
       LEFT JOIN (
         SELECT
@@ -249,51 +262,12 @@ FROM
           INNER JOIN stkitm stk ON itm_.itm_code = stk.itm_code
         WHERE
           itm_.itm_is_paper = 1
+          AND YEAR(job200.j_booked_in) >= 2021
         GROUP BY
           job200.j_number
       ) AS cons_bodega ON jb.j_number = cons_bodega.j_number
     WHERE
-      j_status = "C"
-      AND tsk.tk_code IN (
-        'PRE XL-TIR',
-        'PRE CX-TIR',
-        'PRE SM-TIR',
-        'PCAJ FON G',
-        'PCAJ FON M',
-        'PCAJ FON P',
-        'PCAJ LAT G',
-        'PCAJ LAT P',
-        'PCAR N',
-        'PCAR TS',
-        'PEGTT',
-        'PINS SISA',
-        'H TIR 4ESQ',
-        'H TIR FG',
-        'H TIR FM',
-        'H TIR FP',
-        'H TIR LG',
-        'H TIR LP',
-        'D TIR 2L',
-        'D TIR 4ESQ',
-        'D TIR FG',
-        'D TIR FM',
-        'D TIR FP',
-        'D TIR LG',
-        'D TIR LP',
-        'TROPEQ TIR',
-        'TROMED TIR',
-        'TROGRD TIR',
-        'TROPLA TIR',
-         'REVISADO',
-        'REVISADO2',
-        'REVISADO3',
-        'REVISADO 4',
-        'REVISADO5',
-        'GUILL-TIR'
-        
-      )
-      AND wt_source = 'TS'
-      AND jb.j_ucode1 IS NOT NULL
+      jb.j_ucode1 IS NOT NULL
       AND jb.j_booked_in BETWEEN {startdate} AND {endate}
     GROUP BY
       jb.j_number,
@@ -304,10 +278,12 @@ FROM
 		LEFT JOIN ist ON 
 		j.j_number = ist.ist_job
 		LEFT JOIN inv ON ist.ist_inv_id = inv.inv_id
-		INNER JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
+		LEFT JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
 		FROM job200 
-		INNER JOIN charge c ON job200.j_number = c.cg_job
+		LEFT JOIN charge c ON job200.j_number = c.cg_job
+    WHERE YEAR(c.cg_date_created) >= 2021
 		GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
+    WHERE YEAR(j.j_booked_in) >= 2021
 		GROUP BY j.j_number
   ) AS Facturado ON Tabla1.j_number = Facturado.j_number;""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
 
@@ -321,6 +297,7 @@ FROM
       CONCAT(jb.j_title1, IFNULL(jb.j_title2,'')) as titulo,
       jb.j_type,
       tk_code,
+      jb.j_ucode1,
       SUM(tr.wt_good_qty) AS Cantidad_Buenas,
       SUM(tr.wt_bad_qty) AS Cantidad_Malas,
       jb.j_special_ins AS Datos_Papel,
@@ -353,50 +330,12 @@ FROM
           INNER JOIN stkitm stk ON itm_.itm_code = stk.itm_code
         WHERE
           itm_.itm_is_paper = 1
+          AND YEAR(job200.j_booked_in) >= 2021
         GROUP BY
           job200.j_number
       ) AS cons_bodega ON jb.j_number = cons_bodega.j_number
     WHERE
-      j_status = "C"
-      AND tsk.tk_code IN (
-        'PRE XL-TIR',
-        'PRE CX-TIR',
-        'PRE SM-TIR',
-        'PCAJ FON G',
-        'PCAJ FON M',
-        'PCAJ FON P',
-        'PCAJ LAT G',
-        'PCAJ LAT P',
-        'PCAR N',
-        'PCAR TS',
-        'PEGTT',
-        'PINS SISA',
-        'H TIR 4ESQ',
-        'H TIR FG',
-        'H TIR FM',
-        'H TIR FP',
-        'H TIR LG',
-        'H TIR LP',
-        'D TIR 2L',
-        'D TIR 4ESQ',
-        'D TIR FG',
-        'D TIR FM',
-        'D TIR FP',
-        'D TIR LG',
-        'D TIR LP',
-        'TROPEQ TIR',
-        'TROMED TIR',
-        'TROGRD TIR',
-        'TROPLA TIR',
-        'REVISADO',
-        'REVISADO2',
-        'REVISADO3',
-        'REVISADO 4',
-        'REVISADO5',
-        'GUILL-TIR'
-      )
-      AND wt_source = 'TS'
-      AND jb.j_ucode1 IS NOT NULL 
+      jb.j_ucode1 IS NOT NULL 
       AND jb.j_number IN ({_list})
     GROUP BY
       jb.j_number,
@@ -410,7 +349,9 @@ FROM
 		INNER JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
 		FROM job200 
 		INNER JOIN charge c ON job200.j_number = c.cg_job
+    WHERE YEAR(c.cg_date_created) >= 2021
 		GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
+    WHERE YEAR(j.j_booked_in) >= 2021
 		GROUP BY j.j_number
   ) AS Facturado ON Tabla1.j_number = Facturado.j_number;""".format(_list=args)
 
@@ -448,7 +389,7 @@ FROM
     df.drop(columns='CQty', inplace=True)
 
     df_medidas = df.copy()
-    df_medidas.drop(['Nota','titulo','j_type','Cantidad_Buenas', 'Cantidad_Malas','tk_code','Despacho_Bodega', 'Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
+    df_medidas.drop(['Nota','titulo','j_type','j_ucode1','Cantidad_Buenas', 'Cantidad_Malas','tk_code','Despacho_Bodega', 'Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
 
     df_medidas["Dimensiones Prensa"] = df_medidas.Datos_Papel.str.split(":", expand=True)[2].str.strip().str.split(",", expand=True)[0]
     df_medidas["Número_Pliegos"] = pd.to_numeric(df_medidas.Datos_Papel.str.split(":", expand=True)[2].str.strip().str.split(",", expand=True)[1].str.split(" ", expand=True)[2])
@@ -459,7 +400,7 @@ FROM
 
     df_datos_prensas = df.copy()
 
-    df_datos_prensas.drop(['Nota','titulo','j_type','Datos_Papel','Ancho', 'Alto', 'Gramaje','Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
+    df_datos_prensas.drop(['Nota','titulo','j_type','j_ucode1','Datos_Papel','Ancho', 'Alto', 'Gramaje','Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
 
     df_datos_prensas = df_datos_prensas[df_datos_prensas["tk_code"].isin(["PRE CX-TIR","PRE XL-TIR", "PRE SM-TIR", "PREIND TIR" ])]
 
@@ -484,6 +425,7 @@ FROM
 
     df_medidas = df_medidas.drop_duplicates(subset=['j_number'])
 
+
     df_datos_prensas.insert(4, 'Cantidad_Total', df_datos_prensas['Cantidad_Buenas']+df_datos_prensas['Cantidad_Malas'])
 
     self.progress.emit(40)
@@ -493,7 +435,7 @@ FROM
 
     df_guillotina = df.copy()
 
-    df_guillotina.drop(['Nota','titulo','j_type','Datos_Papel','Ancho', 'Alto', 'Gramaje','Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
+    df_guillotina.drop(['Nota','titulo','j_ucode1','j_type','Datos_Papel','Ancho', 'Alto', 'Gramaje','Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
 
     df_guillotina = df_guillotina[df_guillotina["tk_code"].isin(["GUILL-TIR"])]
 
@@ -528,8 +470,7 @@ FROM
 
     self.progress.emit(50)
 
-    df_impresion = pd.merge(left=df_despacho, right=df_datos_pre, how="inner", left_on="j_number", right_on="j_number")
-
+    df_impresion = pd.merge(left=df_despacho, right=df_datos_pre, how="left", left_on="j_number", right_on="j_number")
 
     df_impresion.insert(8,"Material Impresión (Kg)", df_impresion['Despachos de Bodega (Kg)'] - df_impresion['Merma Corte Inicial (Kg)'])
     df_impresion['Perdida Impresión (Kg)'] = df_impresion['Cantidad_Malas'] * df_impresion['Masa por Pliego Prensa']
@@ -620,20 +561,20 @@ FROM
 
     df_tipoProd = df.copy()
     df_tipoProd.drop_duplicates(subset=['j_number'], inplace=True)
-    df_tipoProd = df_tipoProd[['j_number','titulo','j_type','Nota']]
+    df_tipoProd = df_tipoProd[['j_number','titulo','j_type','j_ucode1','Nota']]
 
     df_consolidado_movimientos = pd.merge(df_consolidado_movimientos, right=df_tipoProd, how='inner', on='j_number')
 
 
-    df_consolidado_movimientos = (df_consolidado_movimientos[['j_number','titulo','j_type', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
+    df_consolidado_movimientos = (df_consolidado_movimientos[['j_number','titulo','j_type','j_ucode1', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
     'Perdida Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)','Unidades Totales','Masa Salida Pegado Cajas (kg)', 'Merma Pegado Cajas (kg)', 'Fracción Merma Pegado Cajas'
-    ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)','Nota']]) if len(df_p_cajas.index) > 0 else (df_consolidado_movimientos[['j_number','titulo','j_type', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
+    ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)','Nota']]) if len(df_p_cajas.index) > 0 else (df_consolidado_movimientos[['j_number','titulo','j_type','j_ucode1', 'Despacho_Bodega', 'Despachos de Bodega (Kg)', 'Merma Corte Inicial (Kg)', 'Fracción Merma Corte Inicial','Pliegos para Arreglo e Impresión', 'Material Impresión (Kg)', 
     'Perdida Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción pérdida Impresión', 'Pliegos para Troquelado','Masa Salida Troquel (kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)'
     ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)','Nota']])
 
     
 
-    df_consolidado_movimientos = df_consolidado_movimientos.rename(columns={"j_number":"OP",'j_type':'Tipo Producto', "Despacho_Bodega":"Despacho de pliegos almacén", "Masa Salida Troquel (k)":"Masa material troquelado conforme", "Despachos de Bodega (Kg)":"Despachos de pliego almacén (Kg)",
+    df_consolidado_movimientos = df_consolidado_movimientos.rename(columns={"j_number":"OP",'j_type':'Tipo Producto','j_ucode1':'Categoría FSC', "Despacho_Bodega":"Despacho de pliegos almacén", "Masa Salida Troquel (k)":"Masa material troquelado conforme", "Despachos de Bodega (Kg)":"Despachos de pliego almacén (Kg)",
     "Merma Corte Inicial (Kg)":"Pérdida Corte Inicial por exceso (Kg)", "Fracción Merma Corte Inicial":"Fracción de pérdida por Corte Inicial (%)", "Material Impresión (Kg)":"Material para Arreglos e Impresión (Kg)",
     "Perdida Impresión (Kg)":"Pérdida por arreglo de  Impresión (Kg)","Fracción pérdida Impresión":"Fracción de pérdida por Impresión (%)", "Masa Salida Troquel (kg)":"Masa material para Troquelado(kg)",
     "Merma Limpieza Troquel (kg)":"Pérdida por Limpieza de Troquel (kg)","Merma Pegado Cajas (kg)":"Pérdida por  Pegado de Cajas (kg)", "Fracción Merma Pegado Cajas":"Fracción de pérdida por Pegado de Cajas"
@@ -685,20 +626,20 @@ FROM
 
       worksheet.set_column(0, max_col-1, 12)
 
+      if dfTrazabilidad is not None:
+        worksheet2 = workbook.add_worksheet('Trazabilidad')
 
-      worksheet2 = workbook.add_worksheet('Trazabilidad')
+        (max_row2, max_col2) = dfTrazabilidad.shape
 
-      (max_row2, max_col2) = dfTrazabilidad.shape
+        cell_format4 = workbook.add_format()
+        cell_format4.set_num_format('d/mm/yyyy h:mm')
 
-      cell_format4 = workbook.add_format()
-      cell_format4.set_num_format('d/mm/yyyy h:mm')
+        cell_format.set_bold()
 
-      cell_format.set_bold()
+        column_settings2 = [{'header': column, 'header_format': cell_format,'format': row_format1 if "Fecha" not in column else cell_format4} for column in dfTrazabilidad.columns]
 
-      column_settings2 = [{'header': column, 'header_format': cell_format,'format': row_format1 if "Fecha" not in column else cell_format4} for column in dfTrazabilidad.columns]
-
-      worksheet2.add_table(0,0,max_row2, max_col2-1, {'data': dfTrazabilidad.values.tolist(), 'style':None, 'columns': column_settings2})
-      worksheet2.set_column(0, max_col2-1,18)
+        worksheet2.add_table(0,0,max_row2, max_col2-1, {'data': dfTrazabilidad.values.tolist(), 'style':None, 'columns': column_settings2})
+        worksheet2.set_column(0, max_col2-1,18)
 
     self.message.emit("Reporte Generado!")
   
