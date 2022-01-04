@@ -20,7 +20,7 @@ def set_datefilter(Filter = False):
 
 
 def db_connectionObj():
-  db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/pruebas?charset=utf8'
+  db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/mayaprin?charset=utf8'
 
   db_connection = create_engine(db_connection_str)
 
@@ -31,7 +31,7 @@ def db_connectionObj():
 def trazabilidad(self, ops, db_connection):
 
   query_str = """SELECT j.j_number AS OP ,CONCAT(j.j_title1, IFNULL(j.j_title2,'')) AS titulo, CASE
-  WHEN tr.wt_resource LIKE \'GUILL%\' then \'Guillotina\'
+  WHEN tr.wt_resource LIKE \'GUILL%\' then \'Convertidora\'
   WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
   WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
   WHEN tr.wt_resource LIKE \'%TRO%\' then \'Troquel\'
@@ -46,7 +46,7 @@ def trazabilidad(self, ops, db_connection):
   GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
   ORDER BY j.j_number;""".format(_list=','.join(['\'{}\''.format(op) for op in ops]))
 
-  query_str1 = """SELECT ist.ist_job AS OP, CONCAT(inv.inv_prefix,inv.inv_number) as no_factura
+  query_str1 = """SELECT ist.ist_job AS OP,inv.inv_date as Fecha_Factura, CONCAT(inv.inv_prefix,inv.inv_number) as no_factura
 		FROM inv
 		INNER JOIN ist ON 
 		inv.inv_id = ist.ist_inv_id
@@ -97,13 +97,13 @@ def trazabilidad(self, ops, db_connection):
     
     dfTrazabilidad = pd.concat(df_list, axis=0)
 
-    listProcesos = ['Guillotina','Prensas','Troquel','Pegado de Cajas','Revisado']
+    listProcesos = ['Convertidora','Prensas','Troquel','Pegado de Cajas','Revisado']
 
     orderList = list(chain.from_iterable((f'Proceso_{Proceso}',f'Operario_{Proceso}',f'Fecha_{Proceso}') for Proceso in listProcesos if Proceso in procesos))
 
     dfTrazabilidad = pd.merge(dfTrazabilidad, right=dfFacturas, how='left', on='OP') 
     
-    dfTrazabilidad = dfTrazabilidad.loc[:,['OP','titulo','no_factura'] + orderList]
+    dfTrazabilidad = dfTrazabilidad.loc[:,['OP','titulo','Fecha_Factura','no_factura'] + orderList]
 
       
           
