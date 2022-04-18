@@ -20,7 +20,8 @@ def set_datefilter(Filter = False):
 
 
 def db_connectionObj():
-  db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/pruebas?charset=utf8'
+  """Obtener un objeto de conexión a la base de datos Mayaprin"""
+  db_connection_str = 'mysql+pymysql://reports:cognos@192.168.1.238/mayaprin?charset=utf8'
 
   db_connection = create_engine(db_connection_str)
 
@@ -29,30 +30,30 @@ def db_connectionObj():
 
 
 def trazabilidad(self, ops, db_connection):
-
-  query_str = """SELECT j.j_number AS OP ,CONCAT(j.j_title1, IFNULL(j.j_title2,'')) AS titulo, CASE
-  WHEN tr.wt_resource LIKE \'GUILL%\' then \'Convertidora\'
-  WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
-  WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
-  WHEN tr.wt_resource LIKE \'%TRO%\' then \'Troquel\'
-  ELSE \'Revisado\' END AS \'Proceso\' , tr.wt_source_code AS Operario, tr.wt_started AS Fecha
-  FROM job200 j
-  INNER JOIN wo200 w ON j.j_number = w.wo_job
-  LEFT JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
-  LEFT JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
-  WHERE tr.wt_source = \'TS\' AND
-  (tk.tk_code LIKE \'%TIR%\' OR tk.tk_code LIKE \'%REVISADO%\')
-  AND j.j_number IN	({_list})
-  GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
-  ORDER BY j.j_number;""".format(_list=','.join(['\'{}\''.format(op) for op in ops]))
-
-  query_str1 = """SELECT ist.ist_job AS OP,inv.inv_date as Fecha_Factura, CONCAT(inv.inv_prefix,inv.inv_number) as no_factura
-		FROM inv
-		INNER JOIN ist ON 
-		inv.inv_id = ist.ist_inv_id
-		WHERE ist.ist_job IN ({_list})""".format(_list=','.join(['\'{}\''.format(op) for op in ops]))
-
   try:
+    query_str = """SELECT j.j_number AS OP ,CONCAT(j.j_title1, IFNULL(j.j_title2,'')) AS titulo, CASE
+    WHEN tr.wt_resource LIKE \'GUILL%\' then \'Convertidora\'
+    WHEN tr.wt_resource LIKE \'%PEG CAJ%\' then \'Pegado de Cajas\'
+    WHEN tr.wt_resource LIKE \'PRE %\' then \'Prensas\'
+    WHEN tr.wt_resource LIKE \'%TRO%\' then \'Troquel\'
+    ELSE \'Revisado\' END AS \'Proceso\' , tr.wt_source_code AS Operario, tr.wt_started AS Fecha
+    FROM job200 j
+    INNER JOIN wo200 w ON j.j_number = w.wo_job
+    LEFT JOIN wo_task200 tk ON w.wo_number = tk.tk_wonum 
+    LEFT JOIN wo_trans200 tr ON tk.tk_id = tr.wt_task_id
+    WHERE tr.wt_source = \'TS\' AND
+    (tk.tk_code LIKE \'%TIR%\' OR tk.tk_code LIKE \'%REVISADO%\')
+    AND j.j_number IN	({_list})
+    GROUP BY j.j_number, tr.wt_resource, tr.wt_source_code
+    ORDER BY j.j_number;""".format(_list=','.join(['\'{}\''.format(op) for op in ops]))
+
+    query_str1 = """SELECT ist.ist_job AS OP,inv.inv_date as Fecha_Factura, CONCAT(inv.inv_prefix,inv.inv_number) as no_factura
+      FROM inv
+      INNER JOIN ist ON 
+      inv.inv_id = ist.ist_inv_id
+      WHERE ist.ist_job IN ({_list})""".format(_list=','.join(['\'{}\''.format(op) for op in ops]))
+
+  
     df_actividades = pd.read_sql_query(text(query_str), con = db_connection)
 
     df_facturas = pd.read_sql_query(text(query_str1), con = db_connection)
@@ -111,259 +112,267 @@ def trazabilidad(self, ops, db_connection):
     return
 
 def movimientos(self,args,path, db_connection):
-
-  query_str1 = """SELECT
-  Tabla1.*, Facturado.Qty, Facturado.CQty
-  FROM
-  (
-    SELECT
-      jb.j_number AS OP,
-      CONCAT(jb.j_title1, IFNULL(jb.j_title2,'')) as titulo,
-      jb.j_type AS 'Tipo Producto',
-      tk_code,
-      jb.j_ucode1 AS 'Categoría FSC',
-      SUM(tr.wt_good_qty) AS Cantidad_Buenas,
-      SUM(tr.wt_bad_qty) AS Cantidad_Malas,
-      jb.j_special_ins AS Datos_Papel,
-      cons_bodega.quantity AS Despacho_Bodega,
-      cons_bodega.Ancho,
-      cons_bodega.Alto,
-      cons_bodega.Gramaje,
-      cons_bodega.Nota,
-      jb.j_ucode4 AS Peso_Ejemplar
-    FROM
-      job200 jb
-      INNER JOIN wo200 wo ON jb.j_number = wo.wo_job
-      INNER JOIN wo_task200 tsk ON wo.wo_number = tsk.tk_wonum
-      LEFT JOIN wo_trans200 tr ON tsk.tk_id = tr.wt_task_id
-      LEFT JOIN (
-        SELECT
-          job200.j_number,
-          SUM(iss.quantity) AS quantity,
-          stk.itm_fvals_0 AS "Ancho",
-          stk.itm_fvals_1 AS "Alto",
-          stk.itm_fvals_2 AS "Gramaje",
-          GROUP_CONCAT(IFNULL(iss.note,'') SEPARATOR ' ') AS "Nota"
-        FROM
-          req
-          INNER JOIN wo_task200 tk ON req.req_task_id = tk.tk_id
-          INNER JOIN wo200 ON tk.tk_wonum = wo200.wo_number
-          INNER JOIN job200 ON job200.j_number = wo200.wo_job
-          INNER JOIN iss ON req.id = iss.req_id
-          INNER JOIN itm_cls_view itm_ ON iss.item = itm_.itm_code
-          INNER JOIN stkitm stk ON itm_.itm_code = stk.itm_code
-        WHERE
-          itm_.itm_is_paper = 1
-          AND YEAR(job200.j_booked_in) >= 2021
-        GROUP BY
-          job200.j_number
-      ) AS cons_bodega ON jb.j_number = cons_bodega.j_number
-    WHERE
-      tsk.tk_code IN (
-        'PRE XL-TIR',
-        'PRE CX-TIR',
-        'PRE SM-TIR',
-        'PCAJ FON G',
-        'PCAJ FON M',
-        'PCAJ FON P',
-        'PCAJ LAT G',
-        'PCAJ LAT P',
-        'PCAR N',
-        'PCAR TS',
-        'PEGTT',
-        'PINS SISA',
-        'H TIR 4ESQ',
-        'H TIR FG',
-        'H TIR FM',
-        'H TIR FP',
-        'H TIR LG',
-        'H TIR LP',
-        'D TIR 2L',
-        'D TIR 4ESQ',
-        'D TIR FG',
-        'D TIR FM',
-        'D TIR FP',
-        'D TIR LG',
-        'D TIR LP',
-        'TROPEQ TIR',
-        'TROMED TIR',
-        'TROGRD TIR',
-        'TROPLA TIR',
-         'REVISADO',
-        'REVISADO2',
-        'REVISADO3',
-        'REVISADO 4',
-        'REVISADO5',
-        'GUILL-TIR'
-        
-      )
-      AND wt_source = 'TS'
-      AND jb.j_ucode1 IS NOT NULL
-    GROUP BY
-      jb.j_number,
-      tsk.tk_code
-  ) AS Tabla1 LEFT JOIN (
-    SELECT j.j_number, chrge.CQty, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
-		FROM job200 j
-		LEFT JOIN ist ON 
-		j.j_number = ist.ist_job
-		LEFT JOIN inv ON ist.ist_inv_id = inv.inv_id
-		INNER JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
-		FROM job200 
-		INNER JOIN charge c ON job200.j_number = c.cg_job
-    WHERE YEAR(c.cg_date_created) >= 2021
-		GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
-    WHERE YEAR(j.j_booked_in) >= 2021
-		GROUP BY j.j_number
-  ) AS Facturado ON Tabla1.OP = Facturado.j_number
-   WHERE Facturado.inv_date BETWEEN {startdate} AND {endate};""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
-
-  query_str2 = """SELECT
-  Tabla1.*, Facturado.Qty, Facturado.CQty
-  FROM
-  (
-    SELECT
-      jb.j_number AS OP,
-      CONCAT(jb.j_title1, IFNULL(jb.j_title2,'')) as titulo,
-      jb.j_type AS 'Tipo Producto',
-		jb.j_ucode1 AS 'Categoría FSC',
-      tk_code,
-      SUM(tr.wt_good_qty) AS Cantidad_Buenas,
-      SUM(tr.wt_bad_qty) AS Cantidad_Malas,
-      jb.j_special_ins AS Datos_Papel,
-      cons_bodega.quantity AS Despacho_Bodega,
-      cons_bodega.Ancho,
-      cons_bodega.Alto,
-      cons_bodega.Gramaje,
-      cons_bodega.Nota,
-      jb.j_ucode4 AS Peso_Ejemplar
-    FROM
-      job200 jb
-      INNER JOIN wo200 wo ON jb.j_number = wo.wo_job
-      LEFT JOIN wo_task200 tsk ON wo.wo_number = tsk.tk_wonum
-      LEFT JOIN wo_trans200 tr ON tsk.tk_id = tr.wt_task_id
-      LEFT JOIN (
-        SELECT
-          job200.j_number,
-          SUM(iss.quantity) AS quantity,
-          stk.itm_fvals_0 AS "Ancho",
-          stk.itm_fvals_1 AS "Alto",
-          stk.itm_fvals_2 AS "Gramaje",
-          GROUP_CONCAT(IFNULL(iss.note,'') SEPARATOR ' ') AS "Nota"
-        FROM
-          req
-          INNER JOIN wo_task200 tk ON req.req_task_id = tk.tk_id
-          INNER JOIN wo200 ON tk.tk_wonum = wo200.wo_number
-          INNER JOIN job200 ON job200.j_number = wo200.wo_job
-          INNER JOIN iss ON req.id = iss.req_id
-          INNER JOIN itm_cls_view itm_ ON iss.item = itm_.itm_code
-          INNER JOIN stkitm stk ON itm_.itm_code = stk.itm_code
-        WHERE
-          itm_.itm_is_paper = 1
-          AND YEAR(job200.j_booked_in) >= 2021
-        GROUP BY
-          job200.j_number
-      ) AS cons_bodega ON jb.j_number = cons_bodega.j_number
-    WHERE
-      jb.j_ucode1 IS NOT NULL
-      AND jb.j_booked_in BETWEEN {startdate} AND {endate}
-    GROUP BY
-      jb.j_number,
-      tsk.tk_code
-  ) AS Tabla1 LEFT JOIN (
-    SELECT j.j_number, chrge.CQty, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
-		FROM job200 j
-		LEFT JOIN ist ON 
-		j.j_number = ist.ist_job
-		LEFT JOIN inv ON ist.ist_inv_id = inv.inv_id
-		LEFT JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
-		FROM job200 
-		LEFT JOIN charge c ON job200.j_number = c.cg_job
-    WHERE YEAR(c.cg_date_created) >= 2021
-		GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
-    WHERE YEAR(j.j_booked_in) >= 2021
-		GROUP BY j.j_number
-  ) AS Facturado ON Tabla1.OP = Facturado.j_number;""".format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
-
-
-  query_str3 = """SELECT
-  Tabla1.*, Facturado.Qty, Facturado.CQty
-  FROM
-  (
-    SELECT
-      jb.j_number AS OP,
-      CONCAT(jb.j_title1, IFNULL(jb.j_title2,'')) as titulo,
-      jb.j_type AS 'Tipo Producto',
-      tk_code,
-      jb.j_ucode1 AS 'Categoría FSC',
-      SUM(tr.wt_good_qty) AS Cantidad_Buenas,
-      SUM(tr.wt_bad_qty) AS Cantidad_Malas,
-      jb.j_special_ins AS Datos_Papel,
-      cons_bodega.quantity AS Despacho_Bodega,
-      cons_bodega.Ancho,
-      cons_bodega.Alto,
-      cons_bodega.Gramaje,
-      cons_bodega.Nota,
-      jb.j_ucode4 AS Peso_Ejemplar
-    FROM
-      job200 jb
-      INNER JOIN wo200 wo ON jb.j_number = wo.wo_job
-      INNER JOIN wo_task200 tsk ON wo.wo_number = tsk.tk_wonum
-      LEFT JOIN wo_trans200 tr ON tsk.tk_id = tr.wt_task_id
-      LEFT JOIN (
-        SELECT
-          job200.j_number,
-          SUM(iss.quantity) AS quantity,
-          stk.itm_fvals_0 AS "Ancho",
-          stk.itm_fvals_1 AS "Alto",
-          stk.itm_fvals_2 AS "Gramaje",
-          GROUP_CONCAT(IFNULL(iss.note,'') SEPARATOR ' ') AS "Nota"
-        FROM
-          req
-          INNER JOIN wo_task200 tk ON req.req_task_id = tk.tk_id
-          INNER JOIN wo200 ON tk.tk_wonum = wo200.wo_number
-          INNER JOIN job200 ON job200.j_number = wo200.wo_job
-          INNER JOIN iss ON req.id = iss.req_id
-          INNER JOIN itm_cls_view itm_ ON iss.item = itm_.itm_code
-          INNER JOIN stkitm stk ON itm_.itm_code = stk.itm_code
-        WHERE
-          itm_.itm_is_paper = 1
-          AND YEAR(job200.j_booked_in) >= 2021
-        GROUP BY
-          job200.j_number
-      ) AS cons_bodega ON jb.j_number = cons_bodega.j_number
-    WHERE
-      jb.j_ucode1 IS NOT NULL 
-      AND jb.j_number IN ({_list})
-    GROUP BY
-      jb.j_number,
-      tsk.tk_code
-  ) AS Tabla1 LEFT JOIN (
-    SELECT j.j_number, chrge.CQty, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
-		FROM job200 j
-		LEFT JOIN ist ON 
-		j.j_number = ist.ist_job
-		LEFT JOIN inv ON ist.ist_inv_id = inv.inv_id
-		INNER JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
-		FROM job200 
-		INNER JOIN charge c ON job200.j_number = c.cg_job
-    WHERE YEAR(c.cg_date_created) >= 2021
-		GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
-    WHERE YEAR(j.j_booked_in) >= 2021
-		GROUP BY j.j_number
-  ) AS Facturado ON Tabla1.OP = Facturado.j_number;""".format(_list=args)
-
-  global dateFilter_byDate_F
-
-  if type(args) is list:
-    if dateFilter_byDate_F:
-      query_str = query_str1
-    else:
-      query_str = query_str2
-  else:
-    query_str = query_str3
-
+  """Calcula y formatea datos de movimientos FSC en base a los parametros.
+  
+  parametros
+  ----------
+  args: (list) indica los argumentos que filtrarán los datos obtenidos de la base de datos (pueden ser fechas o no. pedidos)
+  path: str
+  indica la ruta donde se almacenará el archivo resultante
+  db_connection:object
+   objeto conexión a la base de datos"""
   try:
+    query_str1 = '''SELECT
+    Tabla1.*, Facturado.Qty, Facturado.CQty
+    FROM
+    (
+      SELECT
+        jb.j_number AS OP,
+        CONCAT(jb.j_title1, IFNULL(jb.j_title2,'')) as titulo,
+        jb.j_type AS 'Tipo Producto',
+        tk_code,
+        jb.j_ucode1 AS 'Categoría FSC',
+        SUM(tr.wt_good_qty) AS Cantidad_Buenas,
+        SUM(tr.wt_bad_qty) AS Cantidad_Malas,
+        jb.j_special_ins AS Datos_Papel,
+        cons_bodega.quantity AS Despacho_Bodega,
+        cons_bodega.Ancho,
+        cons_bodega.Alto,
+        cons_bodega.Gramaje,
+        cons_bodega.Nota,
+        jb.j_ucode4 AS Peso_Ejemplar
+      FROM
+        job200 jb
+        INNER JOIN wo200 wo ON jb.j_number = wo.wo_job
+        INNER JOIN wo_task200 tsk ON wo.wo_number = tsk.tk_wonum
+        LEFT JOIN wo_trans200 tr ON tsk.tk_id = tr.wt_task_id
+        LEFT JOIN (
+          SELECT
+            job200.j_number,
+            SUM(iss.quantity) AS quantity,
+            stk.itm_fvals_0 AS "Ancho",
+            stk.itm_fvals_1 AS "Alto",
+            stk.itm_fvals_2 AS "Gramaje",
+            GROUP_CONCAT(IFNULL(iss.note,'') SEPARATOR ' ') AS "Nota"
+          FROM
+            req
+            INNER JOIN wo_task200 tk ON req.req_task_id = tk.tk_id
+            INNER JOIN wo200 ON tk.tk_wonum = wo200.wo_number
+            INNER JOIN job200 ON job200.j_number = wo200.wo_job
+            INNER JOIN iss ON req.id = iss.req_id
+            INNER JOIN itm_cls_view itm_ ON iss.item = itm_.itm_code
+            INNER JOIN stkitm stk ON itm_.itm_code = stk.itm_code
+          WHERE
+            itm_.itm_is_paper = 1
+            AND YEAR(job200.j_booked_in) >= 2021
+          GROUP BY
+            job200.j_number
+        ) AS cons_bodega ON jb.j_number = cons_bodega.j_number
+      WHERE
+        tsk.tk_code IN (
+          'PRE XL-TIR',
+          'PRE CX-TIR',
+          'PRE SM-TIR',
+          'PCAJ FON G',
+          'PCAJ FON M',
+          'PCAJ FON P',
+          'PCAJ LAT G',
+          'PCAJ LAT P',
+          'PCAR N',
+          'PCAR TS',
+          'PEGTT',
+          'PINS SISA',
+          'H TIR 4ESQ',
+          'H TIR FG',
+          'H TIR FM',
+          'H TIR FP',
+          'H TIR LG',
+          'H TIR LP',
+          'D TIR 2L',
+          'D TIR 4ESQ',
+          'D TIR FG',
+          'D TIR FM',
+          'D TIR FP',
+          'D TIR LG',
+          'D TIR LP',
+          'TROPEQ TIR',
+          'TROMED TIR',
+          'TROGRD TIR',
+          'TROPLA TIR',
+          'REVISADO',
+          'REVISADO2',
+          'REVISADO3',
+          'REVISADO 4',
+          'REVISADO5',
+          'GUILL-TIR'
+          
+        )
+        AND wt_source = 'TS'
+        AND jb.j_ucode1 IS NOT NULL
+      GROUP BY
+        jb.j_number,
+        tsk.tk_code
+    ) AS Tabla1 LEFT JOIN (
+      SELECT j.j_number, chrge.CQty, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
+      FROM job200 j
+      LEFT JOIN ist ON 
+      j.j_number = ist.ist_job
+      LEFT JOIN inv ON ist.ist_inv_id = inv.inv_id
+      INNER JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
+      FROM job200 
+      INNER JOIN charge c ON job200.j_number = c.cg_job
+      WHERE YEAR(c.cg_date_created) >= 2021
+      GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
+      WHERE YEAR(j.j_booked_in) >= 2021
+      GROUP BY j.j_number
+    ) AS Facturado ON Tabla1.OP = Facturado.j_number
+    WHERE Facturado.inv_date BETWEEN {startdate} AND {endate};'''.format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
+
+    query_str2 = '''SELECT
+    Tabla1.*, Facturado.Qty, Facturado.CQty
+    FROM
+    (
+      SELECT
+        jb.j_number AS OP,
+        CONCAT(jb.j_title1, IFNULL(jb.j_title2,'')) as titulo,
+        jb.j_type AS 'Tipo Producto',
+      jb.j_ucode1 AS 'Categoría FSC',
+        tk_code,
+        SUM(tr.wt_good_qty) AS Cantidad_Buenas,
+        SUM(tr.wt_bad_qty) AS Cantidad_Malas,
+        jb.j_special_ins AS Datos_Papel,
+        cons_bodega.quantity AS Despacho_Bodega,
+        cons_bodega.Ancho,
+        cons_bodega.Alto,
+        cons_bodega.Gramaje,
+        cons_bodega.Nota,
+        jb.j_ucode4 AS Peso_Ejemplar
+      FROM
+        job200 jb
+        INNER JOIN wo200 wo ON jb.j_number = wo.wo_job
+        LEFT JOIN wo_task200 tsk ON wo.wo_number = tsk.tk_wonum
+        LEFT JOIN wo_trans200 tr ON tsk.tk_id = tr.wt_task_id
+        LEFT JOIN (
+          SELECT
+            job200.j_number,
+            SUM(iss.quantity) AS quantity,
+            stk.itm_fvals_0 AS "Ancho",
+            stk.itm_fvals_1 AS "Alto",
+            stk.itm_fvals_2 AS "Gramaje",
+            GROUP_CONCAT(IFNULL(iss.note,'') SEPARATOR ' ') AS "Nota"
+          FROM
+            req
+            INNER JOIN wo_task200 tk ON req.req_task_id = tk.tk_id
+            INNER JOIN wo200 ON tk.tk_wonum = wo200.wo_number
+            INNER JOIN job200 ON job200.j_number = wo200.wo_job
+            INNER JOIN iss ON req.id = iss.req_id
+            INNER JOIN itm_cls_view itm_ ON iss.item = itm_.itm_code
+            INNER JOIN stkitm stk ON itm_.itm_code = stk.itm_code
+          WHERE
+            itm_.itm_is_paper = 1
+            AND YEAR(job200.j_booked_in) >= 2021
+          GROUP BY
+            job200.j_number
+        ) AS cons_bodega ON jb.j_number = cons_bodega.j_number
+      WHERE
+        jb.j_ucode1 IS NOT NULL
+        AND jb.j_booked_in BETWEEN {startdate} AND {endate}
+      GROUP BY
+        jb.j_number,
+        tsk.tk_code
+    ) AS Tabla1 LEFT JOIN (
+      SELECT j.j_number, chrge.CQty, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
+      FROM job200 j
+      LEFT JOIN ist ON 
+      j.j_number = ist.ist_job
+      LEFT JOIN inv ON ist.ist_inv_id = inv.inv_id
+      LEFT JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
+      FROM job200 
+      LEFT JOIN charge c ON job200.j_number = c.cg_job
+      WHERE YEAR(c.cg_date_created) >= 2021
+      GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
+      WHERE YEAR(j.j_booked_in) >= 2021
+      GROUP BY j.j_number
+    ) AS Facturado ON Tabla1.OP = Facturado.j_number;'''.format(startdate=args[0], endate= args[1] if len(args) > 1 else args[0])
+
+
+    query_str3 = '''SELECT
+    Tabla1.*, Facturado.Qty, Facturado.CQty
+    FROM
+    (
+      SELECT
+        jb.j_number AS OP,
+        CONCAT(jb.j_title1, IFNULL(jb.j_title2,'')) as titulo,
+        jb.j_type AS 'Tipo Producto',
+        tk_code,
+        jb.j_ucode1 AS 'Categoría FSC',
+        SUM(tr.wt_good_qty) AS Cantidad_Buenas,
+        SUM(tr.wt_bad_qty) AS Cantidad_Malas,
+        jb.j_special_ins AS Datos_Papel,
+        cons_bodega.quantity AS Despacho_Bodega,
+        cons_bodega.Ancho,
+        cons_bodega.Alto,
+        cons_bodega.Gramaje,
+        cons_bodega.Nota,
+        jb.j_ucode4 AS Peso_Ejemplar
+      FROM
+        job200 jb
+        INNER JOIN wo200 wo ON jb.j_number = wo.wo_job
+        INNER JOIN wo_task200 tsk ON wo.wo_number = tsk.tk_wonum
+        LEFT JOIN wo_trans200 tr ON tsk.tk_id = tr.wt_task_id
+        LEFT JOIN (
+          SELECT
+            job200.j_number,
+            SUM(iss.quantity) AS quantity,
+            stk.itm_fvals_0 AS "Ancho",
+            stk.itm_fvals_1 AS "Alto",
+            stk.itm_fvals_2 AS "Gramaje",
+            GROUP_CONCAT(IFNULL(iss.note,'') SEPARATOR ' ') AS "Nota"
+          FROM
+            req
+            INNER JOIN wo_task200 tk ON req.req_task_id = tk.tk_id
+            INNER JOIN wo200 ON tk.tk_wonum = wo200.wo_number
+            INNER JOIN job200 ON job200.j_number = wo200.wo_job
+            INNER JOIN iss ON req.id = iss.req_id
+            INNER JOIN itm_cls_view itm_ ON iss.item = itm_.itm_code
+            INNER JOIN stkitm stk ON itm_.itm_code = stk.itm_code
+          WHERE
+            itm_.itm_is_paper = 1
+            AND YEAR(job200.j_booked_in) >= 2021
+          GROUP BY
+            job200.j_number
+        ) AS cons_bodega ON jb.j_number = cons_bodega.j_number
+      WHERE
+        jb.j_ucode1 IS NOT NULL 
+        AND jb.j_number IN ({_list})
+      GROUP BY
+        jb.j_number,
+        tsk.tk_code
+    ) AS Tabla1 LEFT JOIN (
+      SELECT j.j_number, chrge.CQty, SUM(ist.ist_quantity) AS Qty, inv.inv_date AS inv_date
+      FROM job200 j
+      LEFT JOIN ist ON 
+      j.j_number = ist.ist_job
+      LEFT JOIN inv ON ist.ist_inv_id = inv.inv_id
+      INNER JOIN ( SELECT job200.j_number, SUM(c.cg_quantity) AS CQty
+      FROM job200 
+      INNER JOIN charge c ON job200.j_number = c.cg_job
+      WHERE YEAR(c.cg_date_created) >= 2021
+      GROUP BY job200.j_number) AS chrge ON j.j_number = chrge.j_number
+      WHERE YEAR(j.j_booked_in) >= 2021
+      GROUP BY j.j_number
+    ) AS Facturado ON Tabla1.OP = Facturado.j_number;'''.format(_list=args)
+
+    global dateFilter_byDate_F #bool que indica si el filtrado se hizo por fecha
+
+    if type(args) is list:
+      if dateFilter_byDate_F:
+        query_str = query_str1
+      else:
+        query_str = query_str2
+    else:
+      query_str = query_str3
+
     df = pd.read_sql_query(text(query_str), con = db_connection)
     
     self.progress.emit(25)
@@ -470,7 +479,7 @@ def movimientos(self,args,path, db_connection):
 
     df_despacho = df_despacho[['OP','Despacho_Bodega','Despachos de pliego almacén (Kg)','Pérdida Corte Inicial por exceso (Kg)']]
 
-    df_despacho['Fraccupib de pérdida por Corte Inicial (%)'] = df_despacho['Pérdida Corte Inicial por exceso (Kg)'] / df_despacho['Despachos de pliego almacén (Kg)']
+    df_despacho['Fracción de pérdida por Corte Inicial (%)'] = df_despacho['Pérdida Corte Inicial por exceso (Kg)'] / df_despacho['Despachos de pliego almacén (Kg)']
 
     df_datos_pre = df_datos_comb.copy()
 
@@ -589,9 +598,9 @@ def movimientos(self,args,path, db_connection):
     df_consolidado_movimientos = pd.merge(df_consolidado_movimientos, right=df_tipoProd, how='inner', on='OP')
 
 
-    df_consolidado_movimientos = (df_consolidado_movimientos[['OP','titulo','Tipo Producto','Categoría FSC', 'Despacho_Bodega', 'Despachos de pliego almacén (Kg)', 'Pérdida Corte Inicial por exceso (Kg)', 'Fraccupib de pérdida por Corte Inicial (%)','Pliegos para Arreglo e Impresión', 'Material para Arreglos e Impresión (Kg)', 
+    df_consolidado_movimientos = (df_consolidado_movimientos[['OP','titulo','Tipo Producto','Categoría FSC', 'Despacho_Bodega', 'Despachos de pliego almacén (Kg)', 'Pérdida Corte Inicial por exceso (Kg)', 'Fracción de pérdida por Corte Inicial (%)','Pliegos para Arreglo e Impresión', 'Material para Arreglos e Impresión (Kg)', 
     'Pérdida por arreglo de Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción de pérdida por Impresión (%)', 'Pliegos para Troquelado','Masa material para Troquelado(kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)','Unidades Totales','Masa Salida Pegado Cajas (kg)', 'Pérdida por Pegado de Cajas (kg)', 'Fracción de pérdida por Pegado de Cajas (%)'
-    ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)','Nota']]) if len(df_p_cajas.index) > 0 else (df_consolidado_movimientos[['OP','titulo','Tipo Producto','Categoría FSC', 'Despacho_Bodega', 'Despachos de pliego almacén (Kg)', 'Pérdida Corte Inicial por exceso (Kg)', 'Fraccupib de pérdida por Corte Inicial (%)','Pliegos para Arreglo e Impresión', 'Material para Arreglos e Impresión (Kg)', 
+    ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)','Nota']]) if len(df_p_cajas.index) > 0 else (df_consolidado_movimientos[['OP','titulo','Tipo Producto','Categoría FSC', 'Despacho_Bodega', 'Despachos de pliego almacén (Kg)', 'Pérdida Corte Inicial por exceso (Kg)', 'Fracción de pérdida por Corte Inicial (%)','Pliegos para Arreglo e Impresión', 'Material para Arreglos e Impresión (Kg)', 
     'Pérdida por arreglo de Impresión (Kg)','Pérdida por arreglo de Impresión (kg) 2', 'Fracción de pérdida por Impresión (%)', 'Pliegos para Troquelado','Masa material para Troquelado(kg)', 'Merma Limpieza Troquel (kg)','Fracción de pérdida por limpieza de troquel (%)'
     ,'Pérdida por  revisión (kg)','Qty','Masa de material conforme facturado (Kg)','Nota']])
 
