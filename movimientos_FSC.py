@@ -191,13 +191,100 @@ FROM
         'TROMED TIR',
         'TROGRD TIR',
         'TROPLA TIR',
+        'TP TIR',
+        'TP TIR LMP',
+        'TROPLALIMP',
          'REVISADO',
         'REVISADO2',
         'REVISADO3',
         'REVISADO 4',
         'REVISADO5',
-        'GUILL-TIR'
-        
+        'GUILL-TIR',
+        'G3TIR-ESP',
+        'G3TIR2-C12',
+        'G3TIR2-C13',
+        'G3TIR2-C14',
+        'G3TIR2-C15',
+        'G3TIR2-C16',
+        'G3TIR2-C17',
+        'G3TIR2-C18',
+        'G3TIR2-C19',
+        'G3TIR2-C20',
+        'G3TIR2-C21',
+        'G3TIR2-C22',
+        'G3TIR2-C25',
+        'G3TIR3-C12',
+        'G3TIR3-C13',
+        'G3TIR3-C14',
+        'G3TIR3-C15',
+        'G3TIR3-C16',
+        'G3TIR3-C17',
+        'G3TIR3-C18',
+        'G3TIR3-C19',
+        'G3TIR3-C20',
+        'G3TIR3-C21',
+        'G3TIR3-C22',
+        'G3TIR3-C25',
+        'G3TIR4-C12',
+        'G3TIR4-C13',
+        'G3TIR4-C14',
+        'G3TIR4-C15',
+        'G3TIR4-C16',
+        'G3TIR4-C17',
+        'G3TIR4-C18',
+        'G3TIR4-C19',
+        'G3TIR4-C20',
+        'G3TIR4-C21',
+        'G3TIR4-C22',
+        'G3TIR4-C25',
+        'G4-ARR',
+        'G4TIR-ESP',
+        'G4TIR2-C12',
+        'G4TIR2-C13',
+        'G4TIR2-C14',
+        'G4TIR2-C15',
+        'G4TIR2-C16',
+        'G4TIR2-C17',
+        'G4TIR2-C18',
+        'G4TIR2-C19',
+        'G4TIR2-C20',
+        'G4TIR2-C21',
+        'G4TIR2-C22',
+        'G4TIR2-C25',
+        'G4TIR3-C12',
+        'G4TIR3-C13',
+        'G4TIR3-C14',
+        'G4TIR3-C15',
+        'G4TIR3-C16',
+        'G4TIR3-C17',
+        'G4TIR3-C18',
+        'G4TIR3-C19',
+        'G4TIR3-C20',
+        'G4TIR3-C21',
+        'G4TIR3-C22',
+        'G4TIR3-C25',
+        'G4TIR4-C12',
+        'G4TIR4-C13',
+        'G4TIR4-C14',
+        'G4TIR4-C15',
+        'G4TIR4-C16',
+        'G4TIR4-C17',
+        'G4TIR4-C18',
+        'G4TIR4-C19',
+        'G4TIR4-C20',
+        'G4TIR4-C21',
+        'G4TIR4-C22',
+        'G4TIR4-C25',
+        'TIRGZ21',
+        'TPTIR COMB',
+        'TROPLA TIR',
+        'TROPLACART',
+        'TROPLALIMP',
+        'TROPLATIR2',
+        'TP TIR',
+        'TP TIR LMP',
+        'TP TIR REA',
+        'TP TR COMB'
       )
       AND wt_source = 'TS'
       AND jb.j_ucode1 IS NOT NULL
@@ -437,7 +524,7 @@ FROM
 
     df_guillotina.drop(['Nota','titulo','j_ucode1','j_type','Datos_Papel','Ancho', 'Alto', 'Gramaje','Peso_Ejemplar', 'Qty'], axis=1, inplace=True)
 
-    df_guillotina = df_guillotina[df_guillotina["tk_code"].isin(["GUILL-TIR"])]
+    df_guillotina = df_guillotina[df_guillotina["tk_code"].isin(["GUILL-TIR","G3TIR-ESP","G3TIR2-C12","G3TIR2-C13","G3TIR2-C14","G3TIR2-C15","G3TIR2-C16","G3TIR2-C17","G3TIR2-C18","G3TIR2-C19","G3TIR2-C20","G3TIR2-C21","G3TIR2-C22","G3TIR2-C25","G3TIR3-C12","G3TIR3-C13","G3TIR3-C14","G3TIR3-C15","G3TIR3-C16","G3TIR3-C17","G3TIR3-C18","G3TIR3-C19","G3TIR3-C20","G3TIR3-C21","G3TIR3-C22","G3TIR3-C25","G3TIR4-C12","G3TIR4-C13","G3TIR4-C14","G3TIR4-C15","G3TIR4-C16","G3TIR4-C17","G3TIR4-C18","G3TIR4-C19","G3TIR4-C20","G3TIR4-C21","G3TIR4-C22","G3TIR4-C25","G4-ARR","G4TIR-ESP","G4TIR2-C12","G4TIR2-C13","G4TIR2-C14","G4TIR2-C15","G4TIR2-C16","G4TIR2-C17","G4TIR2-C18","G4TIR2-C19","G4TIR2-C20","G4TIR2-C21","G4TIR2-C22","G4TIR2-C25","G4TIR3-C12","G4TIR3-C13","G4TIR3-C14","G4TIR3-C15","G4TIR3-C16","G4TIR3-C17","G4TIR3-C18","G4TIR3-C19","G4TIR3-C20","G4TIR3-C21","G4TIR3-C22","G4TIR3-C25","G4TIR4-C12","G4TIR4-C13","G4TIR4-C14","G4TIR4-C15","G4TIR4-C16","G4TIR4-C17","G4TIR4-C18","G4TIR4-C19","G4TIR4-C20","G4TIR4-C21","G4TIR4-C22","G4TIR4-C25","TIRGZ21"])]
 
     df_guillotina =  pd.merge(left=df_guillotina, right=df_medidas, how='left', left_on='j_number', right_on='j_number')
 
@@ -448,6 +535,8 @@ FROM
     df_guillotina = df_guillotina[['j_number','Masa Perdida (kg)']]
 
     df_datos = pd.merge(left=df_datos_comb, right=df_guillotina,how='left', on='j_number')
+    
+    df_datos.dropna(axis=1,inplace=True)
 
     df_despacho = df_datos.copy()
 
@@ -455,7 +544,7 @@ FROM
 
     df_despacho.drop(columns=['Masa por Pliego Prensa', 'Cantidad_Buenas', 'Cantidad_Malas', 'Cantidad_Total'], inplace=True)
 
-    df_despacho['Merma Corte Inicial (Kg)'] = (((df_despacho['Área Pliego Almacén'] - (df_despacho['Área Pliego Prensa']*df_despacho['Número_Pliegos'])) * df_despacho['Gramaje']) * df_despacho.Despacho_Bodega)  + df_despacho['Masa Perdida (kg)']
+    df_despacho['Merma Corte Inicial (Kg)'] = (((df_despacho['Área Pliego Almacén'] - (df_despacho['Área Pliego Prensa']*df_despacho['Número_Pliegos'])) * df_despacho['Gramaje']) * df_despacho.Despacho_Bodega)
 
     df_despacho['Despachos de Bodega (Kg)'] = df_despacho.Despacho_Bodega * df_despacho['Masa por Pliego Almacén']
 
@@ -504,7 +593,7 @@ FROM
 
     df_troquelado = df.copy()
     df_troquelado.drop(['Datos_Papel','Ancho', 'Alto', 'Gramaje', 'Despacho_Bodega'], axis=1, inplace=True)
-    df_troquelado = df_troquelado[df_troquelado["tk_code"].isin(['TROPEQ TIR','TROMED TIR','TROGRD TIR','TROPLA TIR'])]
+    df_troquelado = df_troquelado[df_troquelado["tk_code"].isin(['TROPEQ TIR','TROMED TIR','TROGRD TIR','TROPLA TIR','TPTIR COMB','TROPLA TIR','TROPLACART','TROPLALIMP','TROPLATIR2','TP TIR','TP TIR LMP','TP TIR REA','TP TR COMB','TP TIR','TP TIR LMP','TROPLALIMP'])]
 
     df_troquelado = pd.merge(left= df_troquelado, right=df_datos_pre[['j_number', 'Masa por Pliego Prensa']], how='left', left_on='j_number', right_on = 'j_number')
 
